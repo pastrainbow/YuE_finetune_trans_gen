@@ -2,7 +2,7 @@
 
 DATA_SETTING=$1
 MODE_TYPE=$2
-TOKENIZER_MODEL=/home/pastrainbow/Documents/YuE_finetune/YuE/inference/mm_tokenizer_v0.2_hf/tokenizer.model
+TOKENIZER_MODEL=/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/inference/mm_tokenizer_v0.2_hf/tokenizer.model
 AUDIO_PROMPT_MODES=($3)
 if [ -z "$3" ]; then
     AUDIO_PROMPT_MODES=('dual' 'inst' 'vocal' 'mixture')

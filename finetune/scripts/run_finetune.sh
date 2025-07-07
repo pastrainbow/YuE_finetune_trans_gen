@@ -1,8 +1,12 @@
 #!/bin/bash
-
+exec > ~/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/run_finetune_log.txt 2>&1
 # ==============================
 # YuE Fine-tuning Script
 # ==============================
+
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=al4624
+#SBATCH --output=run_YuE_finetune%j.out
 
 # Help information
 print_help() {
@@ -114,7 +118,7 @@ NUM_TRAIN_EPOCHS=10
 
 # Data paths (replace with your actual paths)
 DATA_PATH="34708 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_cot_xcodec_textfirst_text_document 47114 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_dual_text_document 40945 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document 40945 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_mixture_text_document 40945 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_vocal_text_document"     
-DATA_CACHE_PATH="./data_cache"
+DATA_CACHE_PATH="/vol/bitbucket/al4624/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split
 DATA_SPLIT="900,50,50"
@@ -122,8 +126,8 @@ DATA_SPLIT="900,50,50"
 # Model configuration
 TOKENIZER_MODEL_PATH="../inference/mm_tokenizer_v0.2_hf/tokenizer.model"
 MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-cot"
-MODEL_CACHE_DIR="model_cache"
-OUTPUT_DIR="model_output"
+MODEL_CACHE_DIR="/vol/bitbucket/al4624/model_cache"
+OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
 DEEPSPEED_CONFIG=config/ds_config_zero2.json
 
 # LoRA configuration
