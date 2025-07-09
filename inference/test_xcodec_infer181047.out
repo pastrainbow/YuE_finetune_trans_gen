@@ -1,0 +1,8 @@
+/vol/bitbucket/al4624/anaconda3/envs/YuE_finetune/lib/python3.10/site-packages/torch/nn/utils/weight_norm.py:134: FutureWarning: `torch.nn.utils.weight_norm` is deprecated in favor of `torch.nn.utils.parametrizations.weight_norm`.
+  WeightNorm.apply(module, name, dim)
+Traceback (most recent call last):
+  File "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/inference/xcodec_infer.py", line 81, in <module>
+    decode(raw_codes, save_path, codec_model, device)
+  File "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/inference/xcodec_infer.py", line 52, in decode
+    decoded_waveform = codec_model.decode(torch.as_tensor(codec_result.astype(np.int16), dtype=torch.long).unsqueeze(0).permute(1, 0, 2).to(device))
+RuntimeError: permute(sparse_coo): number of dimensions in the tensor input does not match the length of the desired ordering of dimensions i.e. input.dim() = 4 is not equal to len(dims) = 3
