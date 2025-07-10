@@ -60,6 +60,7 @@ def decode(npy, save_path, codec_model, device):
     save_audio(decodec_rlt, save_path, 16000)
 
 
+
 #initialise model
 cuda_idx = 0
 device = torch.device(f"cuda:{cuda_idx}" if torch.cuda.is_available() else "cpu")
@@ -78,7 +79,7 @@ code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/"
 encode(audio_path, code_dir_path, codec_model, device)
 
 #decode
-# reconstruct tracks
+# reconstruct track
 npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
 save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
 #decode(npy, save_path, codec_model, device)

@@ -6,7 +6,7 @@
 #email results, store console logs in a .out file
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=al4624
-#SBATCH --output=~/Documents/YuE_finetune/YuE_finetune_trans_gen/slurm_logs/run_YuE_finetune%j.out
+#SBATCH --output=run_YuE_finetune%j.out
 
 # Help information
 print_help() {
