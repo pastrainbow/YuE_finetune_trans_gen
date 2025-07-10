@@ -37,11 +37,13 @@ def save_audio(wav: torch.Tensor, path, sample_rate: int, rescale: bool = False)
     wav = wav * min(limit / max_val, 1) if rescale else wav.clamp(-limit, limit)
     torchaudio.save(str(path), wav, sample_rate=sample_rate, encoding='PCM_S', bits_per_sample=16)
     
-
-def encode(audio_path, code_path, codec_model, device):
+#bottom level/first layer encoding. This is sufficient since we don't need to train stage 2 model
+def encode(audio_path, code_dir_path, codec_model, device):
     audio_data = load_audio_mono(audio_path)
     raw_codes = encode_audio(codec_model, audio_data, device, target_bw=0.5)
-    np.save(code_path, raw_codes)
+    code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".npy"
+    #dimension of the codes is (1, 1, n). We want to go out a level
+    np.save(os.path.join(code_dir_path, code_file_name), raw_codes[0])
     #return raw_codes
 
 #no upsampling
@@ -72,8 +74,8 @@ codec_model.eval()
 
 #encode
 audio_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test.mp3"
-code_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test.npy"
-encode(audio_path, code_path, codec_model, device)
+code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/"
+encode(audio_path, code_dir_path, codec_model, device)
 
 #decode
 # reconstruct tracks
