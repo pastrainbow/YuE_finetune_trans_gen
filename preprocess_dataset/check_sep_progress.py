@@ -7,9 +7,7 @@ file_count = 0
 for input_track_path in input_track_paths:
     name = Path(input_track_path).stem
     vocals_path = os.path.join(output_dir_path, name + ".Vocals.mp3")
-    print(vocals_path)
     instr_path = os.path.join(output_dir_path, name + ".Instrumental.mp3")
-    print(instr_path)
     if (not (os.path.exists(vocals_path) and os.path.exists(instr_path))):
         print(f"File {name} did not get separated.")
     else:
