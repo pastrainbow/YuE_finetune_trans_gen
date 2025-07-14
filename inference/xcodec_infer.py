@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torchaudio
 from torchaudio.transforms import Resample
+from pathlib import Path
 from omegaconf import OmegaConf
 def load_audio_mono(filepath, sampling_rate=16000):
     audio, sr = torchaudio.load(filepath)
@@ -42,23 +43,23 @@ def encode(audio_path, code_dir_path, codec_model, device):
     audio_data = load_audio_mono(audio_path)
     raw_codes = encode_audio(codec_model, audio_data, device, target_bw=0.5)
     code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".npy"
+    print(f"Finished encoding file {audio_path}")
     #dimension of the codes is (1, 1, n). We want to go out a level
     np.save(os.path.join(code_dir_path, code_file_name), raw_codes[0])
     #return raw_codes
 
-#no upsampling
-def decode(npy, save_path, codec_model, device):
-    tracks = []
-    codec_result = np.load(npy)
-    decodec_rlt=[]
-    with torch.no_grad():
-        decoded_waveform = codec_model.decode(torch.as_tensor(codec_result.astype(np.int16), dtype=torch.long).unsqueeze(0).permute(1, 0, 2).to(device))
-    decoded_waveform = decoded_waveform.cpu().squeeze(0)
-    decodec_rlt.append(torch.as_tensor(decoded_waveform))
-    decodec_rlt = torch.cat(decodec_rlt, dim=-1)
-    tracks.append(save_path)
-    save_audio(decodec_rlt, save_path, 16000)
-
+# #no upsampling
+# def decode(npy, save_path, codec_model, device):
+#     tracks = []
+#     codec_result = np.load(npy)
+#     decodec_rlt=[]
+#     with torch.no_grad():
+#         decoded_waveform = codec_model.decode(torch.as_tensor(codec_result.astype(np.int16), dtype=torch.long).unsqueeze(0).permute(1, 0, 2).to(device))
+#     decoded_waveform = decoded_waveform.cpu().squeeze(0)
+#     decodec_rlt.append(torch.as_tensor(decoded_waveform))
+#     decodec_rlt = torch.cat(decodec_rlt, dim=-1)
+#     tracks.append(save_path)
+#     save_audio(decodec_rlt, save_path, 16000)
 
 
 def noise_gen_gaussian(range_factor, frame_count):
@@ -72,11 +73,11 @@ def noise_gen_gaussian(range_factor, frame_count):
     return np.random.normal(mean, std, frame_count)
 
 #signal weight controls how much of the audio signal we want to keep
-def add_noise(file_path, noise_data, signal_weight):
+def add_noise(audio_data, noise_data, signal_weight):
     audio_data *= signal_weight
     audio_data += noise_data * (1.0 - signal_weight)
 
-def noise_file(file_path, sample_rate = 16000, signal_weight):
+def noise_file(file_path, signal_weight, sample_rate = 16000):
     try:
         #mono conversion - YuE only supports mono audio
         audio_data = load_audio_mono(file_path)[0].numpy()
@@ -99,11 +100,11 @@ def noise_file(file_path, sample_rate = 16000, signal_weight):
         #clip above and below, avoid out of range values
         np.clip(audio_data_middle, -1.0, 1.0, out = audio_data_middle)
 
-        print(f"File {file_name} finished noising. Middle segement starts at {middle_segment_start / sample_rate}, ends at {middle_segment_end / sample_rate} ")
+        print(f"File {file_path} finished noising. Middle segement starts at {middle_segment_start / sample_rate}, ends at {middle_segment_end / sample_rate} ")
         return torch.from_numpy(np.array([audio_data]))
     #FMA dataset has corrupted files. It is normal for a few files to fail the processing.
     except Exception as e:
-        print(f"Error processing {file_name}: {e}. Skipping")
+        print(f"Error processing {file_path}: {e}. Skipping")
         raise
 
 #initialise model
@@ -119,14 +120,22 @@ codec_model.to(device)
 codec_model.eval()
 
 #encode
-audio_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test.mp3"
-code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/"
-encode(audio_path, code_dir_path, codec_model, device)
+# track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
+# code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_codes"
 
-#decode
-# reconstruct track
-npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
-save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
-#decode(npy, save_path, codec_model, device)
+track_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original"
+code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_codes"
+
+track_paths = [str(file) for file in Path(track_dir_path).glob('*.mp3') if file.is_file()]
+
+for track_path in track_paths:
+    encode(track_path, code_dir_path, codec_model, device)
+
+
+# #decode
+# # reconstruct track
+# npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
+# save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
+# #decode(npy, save_path, codec_model, device)
 
 
