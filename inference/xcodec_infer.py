@@ -9,6 +9,8 @@ import torchaudio
 from torchaudio.transforms import Resample
 from pathlib import Path
 from omegaconf import OmegaConf
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 def load_audio_mono(filepath, sampling_rate=16000):
     audio, sr = torchaudio.load(filepath)
     # Convert to mono
@@ -128,8 +130,16 @@ code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_codes"
 
 track_paths = [str(file) for file in Path(track_dir_path).glob('*.mp3') if file.is_file()]
 
-for track_path in track_paths:
-    encode(track_path, code_dir_path, codec_model, device)
+num_track = len(track_paths)
+
+if __name__ == "__main__":
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.map(encode, track_paths, [code_dir_path] * num_track, [codec_model] * num_track, [device] * num_track)
+        ]
+
+# for track_path in track_paths:
+#     encode(track_path, code_dir_path, codec_model, device)
 
 
 # #decode

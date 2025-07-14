@@ -1,0 +1,14 @@
+ERROR: Could not open requirements file: [Errno 2] No such file or directory: 'requirements.txt'
+total shard: 2, nnodes: 1, gpu_per_node: 1, shard_per_gpu: 2
+start_from shard: 0
+data_path: /vol/bitbucket/al4624/finetune_dataset/fma_large/unsep
+save_path: /vol/bitbucket/al4624/finetune_dataset/fma_large_sep/residual/
+exp_name: fma_large
+extracting discrete features from raw audio...
+total shard: 2, start from shard: 0
+gpu 0
+shard 0
+log_file: /vol/bitbucket/al4624/finetune_dataset/fma_large_sep/residual//fma_large_0_of_2.log
+shard 1
+log_file: /vol/bitbucket/al4624/finetune_dataset/fma_large_sep/residual//fma_large_1_of_2.log
+All conversions completed. Execution time: 15 seconds
