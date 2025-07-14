@@ -61,6 +61,51 @@ def decode(npy, save_path, codec_model, device):
 
 
 
+def noise_gen_gaussian(range_factor, frame_count):
+    mean = 0.0
+    #portion of values in range = 1 - 1 / range_factor^2
+    #value range is 1 here
+    std = 1.0 / range_factor
+    
+    # Gaussian noise: create a random normal distribution that has the same size as the data to add noise to 
+    # Genearte noise with same size as that of the data.
+    return np.random.normal(mean, std, frame_count)
+
+#signal weight controls how much of the audio signal we want to keep
+def add_noise(file_path, noise_data, signal_weight):
+    audio_data *= signal_weight
+    audio_data += noise_data * (1.0 - signal_weight)
+
+def noise_file(file_path, sample_rate = 16000, signal_weight):
+    try:
+        #mono conversion - YuE only supports mono audio
+        audio_data = load_audio_mono(file_path)[0].numpy()
+        frame_count = len(audio_data)
+        #if training examples are of the same length, we can just calculate this once for the first training example
+        #split to 3 segments: start, middle and end
+        segment_frame_count = int(frame_count / 3)
+        middle_segment_start = segment_frame_count
+        middle_segment_end = segment_frame_count * 2
+        audio_data_middle = audio_data[middle_segment_start : middle_segment_end]
+        
+        #Add the noise to the data
+        #To save computation cost, we can also generate the noise only once, and then use slices of the same noise throughout training to accomodate
+        #for different durations
+        #range factor of 4 covers the dynmaic range quite well without clipping too much
+        noise_data = noise_gen_gaussian(4, segment_frame_count)
+        #0.9 signal weight for now, first finetune introduces only a small amount of noise 
+        add_noise(audio_data_middle, noise_data, signal_weight)
+        
+        #clip above and below, avoid out of range values
+        np.clip(audio_data_middle, -1.0, 1.0, out = audio_data_middle)
+
+        print(f"File {file_name} finished noising. Middle segement starts at {middle_segment_start / sample_rate}, ends at {middle_segment_end / sample_rate} ")
+        return torch.from_numpy(np.array([audio_data]))
+    #FMA dataset has corrupted files. It is normal for a few files to fail the processing.
+    except Exception as e:
+        print(f"Error processing {file_name}: {e}. Skipping")
+        raise
+
 #initialise model
 cuda_idx = 0
 device = torch.device(f"cuda:{cuda_idx}" if torch.cuda.is_available() else "cpu")
