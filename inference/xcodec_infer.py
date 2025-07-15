@@ -131,9 +131,9 @@ codec_model.eval()
 track_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original"
 code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_codes"
 
-track_paths = [str(file) for file in Path(track_dir_path).glob('*.mp3') if file.is_file()]
+# track_paths = [str(file) for file in Path(track_dir_path).glob('*.mp3') if file.is_file()]
 
-num_track = len(track_paths)
+# num_track = len(track_paths)
 
 # if __name__ == "__main__":
 #     with ThreadPoolExecutor() as executor:
@@ -147,8 +147,10 @@ num_track = len(track_paths)
 
 #decode
 # reconstruct track
-npy = "/homes/al4624/Documents/YuE_finetune/test_codes/test.npy"
+npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
 save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
-decode(npy, save_path, codec_model, device)
+#decode(npy, save_path, codec_model, device)
+codes = np.load(npy)
+print(codes)
 
 
