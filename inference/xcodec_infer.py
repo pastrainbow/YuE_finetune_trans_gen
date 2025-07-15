@@ -147,7 +147,7 @@ code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_codes"
 
 #decode
 # reconstruct track
-npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
+npy = "/homes/al4624/Documents/YuE_finetune/test_codes/test.npy"
 save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
 #decode(npy, save_path, codec_model, device)
 codes = np.load(npy)
