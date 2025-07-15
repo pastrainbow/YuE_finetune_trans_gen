@@ -45,13 +45,16 @@ def save_audio(wav: torch.Tensor, path, sample_rate: int, rescale: bool = False)
     
 #bottom level/first layer encoding. This is sufficient since we don't need to train stage 2 model
 def encode(audio_path, code_dir_path, codec_model, device):
-    audio_data = load_audio_mono(audio_path)
-    raw_codes = encode_audio(codec_model, audio_data, device, target_bw=0.5)
-    code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".npy"
-    print(f"Finished encoding file {audio_path}")
-    #dimension of the codes is (1, 1, n). We want to go out a level
-    np.save(os.path.join(code_dir_path, code_file_name), raw_codes[0])
-    #return raw_codes
+    try:
+        audio_data = load_audio_mono(audio_path)
+        raw_codes = encode_audio(codec_model, audio_data, device, target_bw=0.5)
+        code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".npy"
+        print(f"Finished encoding file {audio_path}")
+        np.save(os.path.join(code_dir_path, code_file_name), raw_codes)
+    except Exception as e:
+        print(f"Error encoding {file_path}: {e}. Skipping")
+        raise
+
 
 #no upsampling
 def decode(npy, save_path, codec_model, device):
@@ -112,6 +115,18 @@ def noise_file(file_path, signal_weight, sample_rate = 16000):
         print(f"Error processing {file_path}: {e}. Skipping")
         raise
 
+def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device):
+    try:
+        audio_data = noise_file(audio_path, signal_weight)
+        raw_codes = encode_audio(codec_model, audio_data, device, target_bw=0.5)
+        code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".noised.npy"
+        print(f"Finished noising and encoding file {audio_path}")
+        np.save(os.path.join(code_dir_path, code_file_name), raw_codes)
+    except Exception as e:
+        print(f"Error noising encoding {file_path}: {e}. Skipping")
+        raise
+
+
 #initialise model
 cuda_idx = 0
 device = torch.device(f"cuda:{cuda_idx}" if torch.cuda.is_available() else "cpu")
@@ -125,32 +140,37 @@ codec_model.to(device)
 codec_model.eval()
 
 #encode
-# track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
-# code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_codes"
-
-track_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original"
-code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_codes"
-
-# track_paths = [str(file) for file in Path(track_dir_path).glob('*.mp3') if file.is_file()]
-
-# num_track = len(track_paths)
-
-# if __name__ == "__main__":
-#     with ThreadPoolExecutor() as executor:
-#         futures = [
-#             executor.map(encode, track_paths, [code_dir_path] * num_track, [codec_model] * num_track, [device] * num_track)
-#         ]
-
-# for track_path in track_paths:
-#     encode(track_path, code_dir_path, codec_model, device)
+sep_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
+sep_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
+# sep_track_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original"
+# sep_code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_codes"
+sep_track_paths = [str(file) for file in Path(sep_track_dir_path).glob('*.mp3') if file.is_file()]
+num_sep_track = len(sep_track_paths)
 
 
-#decode
-# reconstruct track
-npy = "/homes/al4624/Documents/YuE_finetune/test_codes/test.npy"
-save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
-#decode(npy, save_path, codec_model, device)
-codes = np.load(npy)
-print(codes)
+mixture_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep"
+mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_noised_codes"
+mixture_track_paths = [str(file) for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
+num_mixture_track = len(mixture_track_paths)
+
+
+if __name__ == "__main__":
+    with ThreadPoolExecutor() as executor:
+        encode_futures = [
+            executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track)
+        ]
+
+        noise_encode_futures = [
+            executor.map(noise_encode, mixture_track_paths, [0.9] * num_mixture_track, [mixture_code_dir_path] * num_mixture_track, [codec_model] * num_mixture_track, [device] * num_mixture_track)
+        ]
+
+
+# #decode
+# # reconstruct track
+# npy = "/homes/al4624/Documents/YuE_finetune/test_codes/test.noised.npy"
+# # npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
+# save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
+# decode(npy, save_path, codec_model, device)
+
 
 
