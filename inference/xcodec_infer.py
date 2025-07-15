@@ -53,18 +53,18 @@ def encode(audio_path, code_dir_path, codec_model, device):
     np.save(os.path.join(code_dir_path, code_file_name), raw_codes[0])
     #return raw_codes
 
-# #no upsampling
-# def decode(npy, save_path, codec_model, device):
-#     tracks = []
-#     codec_result = np.load(npy)
-#     decodec_rlt=[]
-#     with torch.no_grad():
-#         decoded_waveform = codec_model.decode(torch.as_tensor(codec_result.astype(np.int16), dtype=torch.long).unsqueeze(0).permute(1, 0, 2).to(device))
-#     decoded_waveform = decoded_waveform.cpu().squeeze(0)
-#     decodec_rlt.append(torch.as_tensor(decoded_waveform))
-#     decodec_rlt = torch.cat(decodec_rlt, dim=-1)
-#     tracks.append(save_path)
-#     save_audio(decodec_rlt, save_path, 16000)
+#no upsampling
+def decode(npy, save_path, codec_model, device):
+    tracks = []
+    codec_result = np.load(npy)
+    decodec_rlt=[]
+    with torch.no_grad():
+        decoded_waveform = codec_model.decode(torch.as_tensor(codec_result.astype(np.int16), dtype=torch.long).unsqueeze(0).permute(1, 0, 2).to(device))
+    decoded_waveform = decoded_waveform.cpu().squeeze(0)
+    decodec_rlt.append(torch.as_tensor(decoded_waveform))
+    decodec_rlt = torch.cat(decodec_rlt, dim=-1)
+    tracks.append(save_path)
+    save_audio(decodec_rlt, save_path, 16000)
 
 
 def noise_gen_gaussian(range_factor, frame_count):
@@ -135,20 +135,20 @@ track_paths = [str(file) for file in Path(track_dir_path).glob('*.mp3') if file.
 
 num_track = len(track_paths)
 
-if __name__ == "__main__":
-    with ThreadPoolExecutor() as executor:
-        futures = [
-            executor.map(encode, track_paths, [code_dir_path] * num_track, [codec_model] * num_track, [device] * num_track)
-        ]
+# if __name__ == "__main__":
+#     with ThreadPoolExecutor() as executor:
+#         futures = [
+#             executor.map(encode, track_paths, [code_dir_path] * num_track, [codec_model] * num_track, [device] * num_track)
+#         ]
 
 # for track_path in track_paths:
 #     encode(track_path, code_dir_path, codec_model, device)
 
 
-# #decode
-# # reconstruct track
-# npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
-# save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
-# #decode(npy, save_path, codec_model, device)
+#decode
+# reconstruct track
+npy = "/homes/al4624/Documents/YuE_finetune/test_codes/test.npy"
+save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
+decode(npy, save_path, codec_model, device)
 
 
