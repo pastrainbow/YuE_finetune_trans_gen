@@ -34,20 +34,38 @@ from preprocess_data_conditional_xcodec import Encoder as EncoderBase
 DEBUG = False
 np.random.seed(42)
 
+
+def gen_ICL_trans_gen_instruction(data):
+    """
+    Generate instruction prompt for ICL transition generation from json line object
+    """
+    #Every example has beginning, middle, and end segments, so middle is the second segment
+    middle = data['splitted_lyrics']['segmented_lyrics'][1]
+    middle_start_token_frame = middle['codec_frame_start']
+    middle_end_token_frame = middle['codec_frame_end']
+    
+    instruction = (
+        "Transform the music from noisy to clean by generating music for the noisy middle segment. " 
+        f"Middle segment starts at token {middle_start_token_frame} and ends at token {middle_end_token_frame}. " 
+        "Keep beginning segment and end segment identical."
+    )
+
+    return instruction
+
 def get_size_in_bytes(arr):
     """Returns the size of a numpy array in bytes."""
     return arr.nbytes
 
-def inverse_transform_sampling(cdf, x_values, num_samples=1):
-    """
-    Performs inverse transform sampling given a CDF.
-    Used for sampling audio prompt lengths in ICL mode.
-    """
-    # Generate uniformly distributed random numbers
-    r = np.random.rand(num_samples)
-    # Find corresponding x values using interpolation on the CDF
-    random_samples = np.interp(r, cdf, x_values)
-    return random_samples
+# def inverse_transform_sampling(cdf, x_values, num_samples=1):
+#     """
+#     Performs inverse transform sampling given a CDF.
+#     Used for sampling audio prompt lengths in ICL mode.
+#     """
+#     # Generate uniformly distributed random numbers
+#     r = np.random.rand(num_samples)
+#     # Find corresponding x values using interpolation on the CDF
+#     random_samples = np.interp(r, cdf, x_values)
+#     return random_samples
 
 class Encoder(EncoderBase):
     """
@@ -362,120 +380,124 @@ class Encoder(EncoderBase):
 
         doc_ids = []
         sentence_lens = [] # here sentence means segment
-        instruction = self.args.instruction
+
+        instruction = gen_ICL_trans_gen_instruction(data)
 
         # --- Header Construction ---
         if self.args.use_audio_icl:
             # --- Start ICL Prompt Generation ---
             audio_prompt_codec_ids = []
             try:
-                # Use the full range covered by lyrics segments for prompt sampling
-                prompt_range_start_frame = segmented_lyrics[0].get('codec_frame_start', 0)
-                prompt_range_end_frame = segmented_lyrics[-1].get('codec_frame_end', raw_codec_vocals.shape[1])
+                # # Use the full range covered by lyrics segments for prompt sampling
+                # prompt_range_start_frame = segmented_lyrics[0].get('codec_frame_start', 0)
+                # prompt_range_end_frame = segmented_lyrics[-1].get('codec_frame_end', raw_codec_vocals.shape[1])
 
-                # Ensure range is valid
-                if prompt_range_start_frame >= prompt_range_end_frame:
-                    raise ValueError(f"Invalid prompt range: start={prompt_range_start_frame}, end={prompt_range_end_frame}")
+                # # Ensure range is valid
+                # if prompt_range_start_frame >= prompt_range_end_frame:
+                #     raise ValueError(f"Invalid prompt range: start={prompt_range_start_frame}, end={prompt_range_end_frame}")
 
                 # Extract relevant segment parts for prompt generation
-                raw_codec_vocals_prompt_seg = raw_codec_vocals[:, prompt_range_start_frame:prompt_range_end_frame]
-                raw_codec_instrumental_prompt_seg = raw_codec_instrumental[:, prompt_range_start_frame:prompt_range_end_frame]
-                raw_codec_mixture_prompt_seg = None
-                if raw_codec_mixture is not None:
-                    raw_codec_mixture_prompt_seg = raw_codec_mixture[:, prompt_range_start_frame:prompt_range_end_frame]
+                # raw_codec_vocals_prompt = raw_codec_vocals
+                # raw_codec_instrumental_prompt = raw_codec_instrumental
+                # raw_codec_mixture_prompt = None
+                # if raw_codec_mixture is not None:
+                #     raw_codec_mixture_prompt = raw_codec_mixture
 
-                vocals_ids_prompt = Encoder.codectool.npy2ids(raw_codec_vocals_prompt_seg)
-                instrumental_ids_prompt = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt_seg)
+                # vocals_ids_prompt = Encoder.codectool.npy2ids(raw_codec_vocals_prompt)
+                instrumental_ids_prompt = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt)
 
                 # Check if ids are valid lists/arrays
-                if not isinstance(vocals_ids_prompt, (list, np.ndarray)) or not isinstance(instrumental_ids_prompt, (list, np.ndarray)):
-                    raise TypeError("npy2ids did not return list/ndarray for prompt segment")
-                if len(vocals_ids_prompt) == 0:
-                    raise ValueError("Empty codec IDs generated for prompt segment")
+                # if not isinstance(vocals_ids_prompt, (list, np.ndarray)) or not isinstance(instrumental_ids_prompt, (list, np.ndarray)):
+                #     raise TypeError("npy2ids did not return list/ndarray for prompt segment")
+                # if len(vocals_ids_prompt) == 0:
+                #     raise ValueError("Empty codec IDs generated for prompt segment")
 
                 options_codecs = {}
                 codec_step = 1 # How many codec tokens per original frame
                 selected_option = self.args.audio_prompt_mode
 
                 if selected_option == "dual":
-                    codec_step = 2
-                    if len(vocals_ids_prompt) != len(instrumental_ids_prompt):
-                        raise ValueError(f"Length mismatch for interleaving prompt: {len(vocals_ids_prompt)} vs {len(instrumental_ids_prompt)}")
-                    ids_segment_interleaved = rearrange([np.array(vocals_ids_prompt), np.array(instrumental_ids_prompt)], 'b n -> (n b)')
-                    options_codecs['dual'] = ids_segment_interleaved
+                    raise ValueError(f"Only supports instrumental mode")
+                    # codec_step = 2
+                    # if len(vocals_ids_prompt) != len(instrumental_ids_prompt):
+                    #     raise ValueError(f"Length mismatch for interleaving prompt: {len(vocals_ids_prompt)} vs {len(instrumental_ids_prompt)}")
+                    # ids_segment_interleaved = rearrange([np.array(vocals_ids_prompt), np.array(instrumental_ids_prompt)], 'b n -> (n b)')
+                    # options_codecs['dual'] = ids_segment_interleaved
                 elif selected_option == "mixture":
-                    if raw_codec_mixture_prompt_seg is None: # Ensure mixture was loaded
-                         raise ValueError("Mixture codec selected for prompt but not loaded/available.")
-                    mixture_ids_prompt = Encoder.codectool.npy2ids(raw_codec_mixture_prompt_seg)
-                    if not isinstance(mixture_ids_prompt, (list, np.ndarray)): raise TypeError("npy2ids failed for mixture prompt")
-                    options_codecs['mixture'] = np.array(mixture_ids_prompt)
+                    raise ValueError(f"Only supports instrumental mode")
+                    # if raw_codec_mixture_prompt is None: # Ensure mixture was loaded
+                    #      raise ValueError("Mixture codec selected for prompt but not loaded/available.")
+                    # mixture_ids_prompt = Encoder.codectool.npy2ids(raw_codec_mixture_prompt)
+                    # if not isinstance(mixture_ids_prompt, (list, np.ndarray)): raise TypeError("npy2ids failed for mixture prompt")
+                    # options_codecs['mixture'] = np.array(mixture_ids_prompt)
                 elif selected_option == "inst":
                     options_codecs['inst'] = np.array(instrumental_ids_prompt)
                 elif selected_option == "vocal":
-                    options_codecs['vocal'] = np.array(vocals_ids_prompt)
+                    raise ValueError(f"Only supports instrumental mode")
+                    # options_codecs['vocal'] = np.array(vocals_ids_prompt)
                 else:
                     raise ValueError(f"Invalid audio_prompt_mode: {selected_option}")
 
-                # Determine prompt length in codec frames/tokens
-                audio_prompt_length_in_secs = inverse_transform_sampling(Encoder.cdf_values, Encoder.x_values).item()
-                audio_prompt_length_in_frames = int(audio_prompt_length_in_secs * fps)
-                audio_prompt_length_in_codec_tokens = audio_prompt_length_in_frames * codec_step
+                # # Determine prompt length in codec frames/tokens
+                # audio_prompt_length_in_secs = inverse_transform_sampling(Encoder.cdf_values, Encoder.x_values).item()
+                # audio_prompt_length_in_frames = int(audio_prompt_length_in_secs * fps)
+                # audio_prompt_length_in_codec_tokens = audio_prompt_length_in_frames * codec_step
 
-                segment_duration_frames = prompt_range_end_frame - prompt_range_start_frame
-                segment_duration_codec_tokens = segment_duration_frames * codec_step
+                # segment_duration_frames = prompt_range_end_frame - prompt_range_start_frame
+                # segment_duration_codec_tokens = segment_duration_frames * codec_step
 
-                # Ensure prompt length is valid and fits within the segment
-                if audio_prompt_length_in_codec_tokens <= 0:
-                    audio_prompt_length_in_codec_tokens = int(1 * fps * codec_step) # Default to 1 second
-                if audio_prompt_length_in_codec_tokens >= segment_duration_codec_tokens:
-                    audio_prompt_length_in_codec_tokens = segment_duration_codec_tokens // 2 # Take half if too long
-                    if DEBUG: print(f"Prompt length adjusted to {audio_prompt_length_in_codec_tokens} tokens (half segment) for {data['id']}")
+                # # Ensure prompt length is valid and fits within the segment
+                # if audio_prompt_length_in_codec_tokens <= 0:
+                #     audio_prompt_length_in_codec_tokens = int(1 * fps * codec_step) # Default to 1 second
+                # if audio_prompt_length_in_codec_tokens >= segment_duration_codec_tokens:
+                #     audio_prompt_length_in_codec_tokens = segment_duration_codec_tokens // 2 # Take half if too long
+                #     if DEBUG: print(f"Prompt length adjusted to {audio_prompt_length_in_codec_tokens} tokens (half segment) for {data['id']}")
 
                 # --- Sample start position for the prompt ---
-                max_start_token_index = segment_duration_codec_tokens - audio_prompt_length_in_codec_tokens
-                if max_start_token_index < 0 : max_start_token_index = 0
+                # max_start_token_index = segment_duration_codec_tokens - audio_prompt_length_in_codec_tokens
+                # if max_start_token_index < 0 : max_start_token_index = 0
 
-                prompt_start_token_idx = 0
+                # prompt_start_token_idx = 0
                 # Try sampling from chorus if available
-                chorus_list = [s for s in data.get('msa', []) if s.get('label') == 'chorus']
-                if chorus_list:
-                    random_chorus = random.choice(chorus_list)
-                    chorus_start_sec = random_chorus.get('start', 0)
-                    chorus_end_sec = random_chorus.get('end', full_length_of_song)
+                # chorus_list = [s for s in data.get('msa', []) if s.get('label') == 'chorus']
+                # if chorus_list:
+                #     random_chorus = random.choice(chorus_list)
+                #     chorus_start_sec = random_chorus.get('start', 0)
+                #     chorus_end_sec = random_chorus.get('end', full_length_of_song)
 
-                    # Convert chorus times relative to the start of the lyrics segment range
-                    chorus_start_frame_relative = max(0, int(chorus_start_sec * fps) - prompt_range_start_frame)
-                    chorus_end_frame_relative = min(segment_duration_frames, int(chorus_end_sec * fps) - prompt_range_start_frame)
+                #     # Convert chorus times relative to the start of the lyrics segment range
+                #     chorus_start_frame_relative = max(0, int(chorus_start_sec * fps) - prompt_range_start_frame)
+                #     chorus_end_frame_relative = min(segment_duration_frames, int(chorus_end_sec * fps) - prompt_range_start_frame)
 
-                    chorus_start_token_relative = chorus_start_frame_relative * codec_step
-                    chorus_end_token_relative = chorus_end_frame_relative * codec_step
+                #     chorus_start_token_relative = chorus_start_frame_relative * codec_step
+                #     chorus_end_token_relative = chorus_end_frame_relative * codec_step
 
-                    # Define valid start range within the chorus
-                    chorus_max_start_token = chorus_end_token_relative - audio_prompt_length_in_codec_tokens
-                    chorus_min_start_token = chorus_start_token_relative
+                #     # Define valid start range within the chorus
+                #     chorus_max_start_token = chorus_end_token_relative - audio_prompt_length_in_codec_tokens
+                #     chorus_min_start_token = chorus_start_token_relative
 
-                    if chorus_max_start_token > chorus_min_start_token:
-                        prompt_start_token_idx = random.randint(chorus_min_start_token, chorus_max_start_token)
-                    else:
-                        prompt_start_token_idx = random.randint(0, max_start_token_index) # Fallback
-                else:
-                    prompt_start_token_idx = random.randint(0, max_start_token_index) # Random start
+                #     if chorus_max_start_token > chorus_min_start_token:
+                #         prompt_start_token_idx = random.randint(chorus_min_start_token, chorus_max_start_token)
+                #     else:
+                #         prompt_start_token_idx = random.randint(0, max_start_token_index) # Fallback
+                # else:
+                #     prompt_start_token_idx = random.randint(0, max_start_token_index) # Random start
 
-                prompt_end_token_idx = prompt_start_token_idx + audio_prompt_length_in_codec_tokens
-                audio_prompt_codec_array = options_codecs[selected_option][prompt_start_token_idx:prompt_end_token_idx]
+                # prompt_end_token_idx = prompt_start_token_idx + audio_prompt_length_in_codec_tokens
+                audio_prompt_codec_array = options_codecs[selected_option]
 
                 # Optional: Filter prompts with low variation
-                retry_count=0
-                min_unique_ratio = 0.1
-                while (len(np.unique(audio_prompt_codec_array)) < len(audio_prompt_codec_array) * min_unique_ratio) and retry_count < 5:
-                    if DEBUG: print(f"Retrying prompt sampling due to low variation ({len(np.unique(audio_prompt_codec_array))} unique) for {data['id']}")
-                    prompt_start_token_idx = random.randint(0, max_start_token_index)
-                    prompt_end_token_idx = prompt_start_token_idx + audio_prompt_length_in_codec_tokens
-                    audio_prompt_codec_array = options_codecs[selected_option][prompt_start_token_idx:prompt_end_token_idx]
-                    retry_count += 1
+                # retry_count=0
+                # min_unique_ratio = 0.1
+                # while (len(np.unique(audio_prompt_codec_array)) < len(audio_prompt_codec_array) * min_unique_ratio) and retry_count < 5:
+                #     if DEBUG: print(f"Retrying prompt sampling due to low variation ({len(np.unique(audio_prompt_codec_array))} unique) for {data['id']}")
+                #     prompt_start_token_idx = random.randint(0, max_start_token_index)
+                #     prompt_end_token_idx = prompt_start_token_idx + audio_prompt_length_in_codec_tokens
+                #     audio_prompt_codec_array = options_codecs[selected_option][prompt_start_token_idx:prompt_end_token_idx]
+                #     retry_count += 1
 
-                if retry_count == 5:
-                    print(f"Warning: Could not find suitable audio prompt with enough variation for {data['id']} after 5 retries.")
+                # if retry_count == 5:
+                #     print(f"Warning: Could not find suitable audio prompt with enough variation for {data['id']} after 5 retries.")
 
                 audio_prompt_codec_ids = ([Encoder.tokenizer.soa] + Encoder.codectool.sep_ids +
                                         list(audio_prompt_codec_array) +
@@ -491,7 +513,7 @@ class Encoder(EncoderBase):
 
 
             # Construct ICL-CoT Header
-            genre_str = '[Genre] ' + data['genres']
+            genre_str = '[Genre] ' + data['genres'].replace("clean", "noisy")
             complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
             # Format: <Instruction> \n <Genre> \n <Lyrics> [start_of_reference] <Prompt> [end_of_reference]
             head = f'{instruction}\n{genre_str}\n{complete_lyrics}'

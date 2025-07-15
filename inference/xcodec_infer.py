@@ -148,10 +148,10 @@ sep_track_paths = [str(file) for file in Path(sep_track_dir_path).glob('*.mp3') 
 num_sep_track = len(sep_track_paths)
 
 
-mixture_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep"
-mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_noised_codes"
-mixture_track_paths = [str(file) for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
-num_mixture_track = len(mixture_track_paths)
+inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
+inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
+inst_track_paths = [str(file) for file in Path(inst_track_dir_path).glob('*.Instrumental.mp3') if file.is_file()]
+num_inst_track = len(inst_track_paths)
 
 
 if __name__ == "__main__":
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         ]
 
         noise_encode_futures = [
-            executor.map(noise_encode, mixture_track_paths, [0.9] * num_mixture_track, [mixture_code_dir_path] * num_mixture_track, [codec_model] * num_mixture_track, [device] * num_mixture_track)
+            executor.map(noise_encode, inst_track_paths, [0.9] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track)
         ]
 
 
