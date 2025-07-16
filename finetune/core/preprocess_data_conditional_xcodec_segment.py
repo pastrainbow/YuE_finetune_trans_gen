@@ -123,7 +123,7 @@ class Encoder(EncoderBase):
             raw_codec_segment = raw_codec[:, segment['codec_frame_start']:segment['codec_frame_end']]
 
             # tokenize the text
-            instruction = self.args.instruction
+            instruction = gen_ICL_trans_gen_instruction(data)
             text = instruction + '\n' + line_content # Fixed newline escape
 
             if self.args.instruction_dropout_rate > 0.0:
@@ -278,7 +278,7 @@ class Encoder(EncoderBase):
         lens = {}
 
         # --- Initial Data Loading and Validation ---
-        required_keys = ['splitted_lyrics', 'vocals_codec', 'instrumental_codec', 'audio_length_in_sec', 'genres', 'id']
+        required_keys = ['splitted_lyrics', 'vocals_codec', 'instrumental_codec', 'noised_instrumental_codec' 'audio_length_in_sec', 'genres', 'id']
         if self.args.use_audio_icl:
             # ICL requires additional keys
             required_keys.extend(['msa', 'codec'])
@@ -302,6 +302,7 @@ class Encoder(EncoderBase):
         try:
             raw_codec_vocals = np.load(data['vocals_codec'])
             raw_codec_instrumental = np.load(data['instrumental_codec'])
+            raw_codec_noised_instrumental = np.load(data['noised_instrumental_codec'])
             # Load mixture codec only if needed for ICL prompt or future use
             raw_codec_mixture = None
             if self.args.use_audio_icl and self.args.audio_prompt_mode == "mixture":
@@ -394,7 +395,7 @@ class Encoder(EncoderBase):
 
                 # Extract relevant segment parts for prompt generation
                 # raw_codec_vocals_prompt = raw_codec_vocals
-                raw_codec_instrumental_prompt = raw_codec_instrumental
+                raw_codec_instrumental_prompt = raw_codec_noised_instrumental
                 # raw_codec_mixture_prompt = None
                 # if raw_codec_mixture is not None:
                 #     raw_codec_mixture_prompt = raw_codec_mixture
