@@ -30,7 +30,7 @@ elif [ "$DATA_SETTING" == "trans_gen" ]; then
        DATA_ROOT=example
        NAME_PREFIX=trans_gen.msa.xcodec_16k
        CODEC_TYPE=xcodec
-       INSTRUCTION="Remove the noise in the middle segment by generating music that fits with the start and end segments. Keep start and end segments identical."
+       INSTRUCTION="" #Unused
        ORDER=textfirst
        DROPOUT=0.0
        KEEP_SEQUENTIAL_SAMPLES=true

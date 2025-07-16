@@ -36,18 +36,14 @@ np.random.seed(42)
 
 
 def gen_ICL_trans_gen_instruction(data):
-    """
-    Generate instruction prompt for ICL transition generation from json line object
-    """
-    #Every example has beginning, middle, and end segments, so middle is the second segment
     middle = data['splitted_lyrics']['segmented_lyrics'][1]
-    middle_start_token_frame = middle['codec_frame_start']
-    middle_end_token_frame = middle['codec_frame_end']
+    middle_start = middle['codec_frame_start']
+    middle_end = middle['codec_frame_end']
     
     instruction = (
-        "Transform the music from noisy to clean by generating music for the noisy middle segment. " 
-        f"Middle segment starts at token {middle_start_token_frame} and ends at token {middle_end_token_frame}. " 
-        "Keep beginning segment and end segment identical."
+        f"Given a music track where the middle segment (from token {middle_start} to token {middle_end}) is corrupted by noise, " 
+        "generate a clean version of the track where the middle segment matches the style, instrumentation, and rhythm of the surrounding segments (before and after the noise), " 
+        "Use the beginning and end segments as references to reconstruct the missing or damaged section smoothly, ensuring seamless musical continuity."
     )
 
     return instruction
@@ -398,7 +394,7 @@ class Encoder(EncoderBase):
 
                 # Extract relevant segment parts for prompt generation
                 # raw_codec_vocals_prompt = raw_codec_vocals
-                # raw_codec_instrumental_prompt = raw_codec_instrumental
+                raw_codec_instrumental_prompt = raw_codec_instrumental
                 # raw_codec_mixture_prompt = None
                 # if raw_codec_mixture is not None:
                 #     raw_codec_mixture_prompt = raw_codec_mixture
@@ -513,7 +509,7 @@ class Encoder(EncoderBase):
 
 
             # Construct ICL-CoT Header
-            genre_str = '[Genre] ' + data['genres'].replace("clean", "noisy")
+            genre_str = '[Genre] ' + data['genres']
             complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
             # Format: <Instruction> \n <Genre> \n <Lyrics> [start_of_reference] <Prompt> [end_of_reference]
             head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
