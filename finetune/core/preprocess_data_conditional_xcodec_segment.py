@@ -31,7 +31,7 @@ from core.datasets import indexed_dataset
 from preprocess_data_conditional_xcodec import get_file_name, check_files_exist
 from preprocess_data_conditional_xcodec import Encoder as EncoderBase
 
-DEBUG = False
+DEBUG = True
 np.random.seed(42)
 
 
@@ -77,6 +77,7 @@ class Encoder(EncoderBase):
 
     def encode_mix_text_and_codec(self, json_line):
         """Encodes text and codec data, simple concatenation based on order."""
+        if DEBUG: print("[FINETUNE] Function encode_mix_text_and_codec called.")
         data = json.loads(json_line)
         assert 'text' in data and 'codec' in data, "`text` and `codec` must be in the json key"
 
@@ -278,7 +279,7 @@ class Encoder(EncoderBase):
         lens = {}
 
         # --- Initial Data Loading and Validation ---
-        required_keys = ['splitted_lyrics', 'vocals_codec', 'instrumental_codec', 'noised_instrumental_codec' 'audio_length_in_sec', 'genres', 'id']
+        required_keys = ['splitted_lyrics', 'vocals_codec', 'instrumental_codec', 'noised_instrumental_codec', 'audio_length_in_sec', 'genres', 'id']
         if self.args.use_audio_icl:
             # ICL requires additional keys
             required_keys.extend(['msa', 'codec'])
@@ -379,6 +380,8 @@ class Encoder(EncoderBase):
         sentence_lens = [] # here sentence means segment
 
         instruction = gen_ICL_trans_gen_instruction(data)
+
+        if DEBUG: print(f"[FINETUNE] instruciton prompt: {instruction}")
 
         # --- Header Construction ---
         if self.args.use_audio_icl:
