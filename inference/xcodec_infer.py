@@ -33,16 +33,6 @@ def encode_audio(codec_model, audio_prompt, device, target_bw=0.5):
     raw_codes = raw_codes.cpu().numpy().astype(np.int16)
     return raw_codes[0]
 
-
-def save_audio(wav: torch.Tensor, path, sample_rate: int, rescale: bool = False):
-    folder_path = os.path.dirname(path)
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-    limit = 0.99
-    max_val = wav.abs().max()
-    wav = wav * min(limit / max_val, 1) if rescale else wav.clamp(-limit, limit)
-    torchaudio.save(str(path), wav, sample_rate=sample_rate, encoding='PCM_S', bits_per_sample=16)
-    
 #bottom level/first layer encoding. This is sufficient since we don't need to train stage 2 model
 def encode(audio_path, code_dir_path, codec_model, device):
     try:
@@ -54,20 +44,6 @@ def encode(audio_path, code_dir_path, codec_model, device):
     except Exception as e:
         print(f"Error encoding {file_path}: {e}. Skipping")
         raise
-
-
-#no upsampling
-def decode(npy, save_path, codec_model, device):
-    tracks = []
-    codec_result = np.load(npy)
-    decodec_rlt=[]
-    with torch.no_grad():
-        decoded_waveform = codec_model.decode(torch.as_tensor(codec_result.astype(np.int16), dtype=torch.long).unsqueeze(0).permute(1, 0, 2).to(device))
-    decoded_waveform = decoded_waveform.cpu().squeeze(0)
-    decodec_rlt.append(torch.as_tensor(decoded_waveform))
-    decodec_rlt = torch.cat(decodec_rlt, dim=-1)
-    tracks.append(save_path)
-    save_audio(decodec_rlt, save_path, 16000)
 
 
 def noise_gen_gaussian(range_factor, frame_count):
@@ -117,13 +93,16 @@ def noise_file(file_path, signal_weight, sample_rate = 16000):
 
 def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device):
     try:
+        if (not os.path.exists(audio_path)):
+            print(f"File {audio_path} does not exist. Skipping")
+            return
         audio_data = noise_file(audio_path, signal_weight)
         raw_codes = encode_audio(codec_model, audio_data, device, target_bw=0.5)
         code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".noised.npy"
         print(f"Finished noising and encoding file {audio_path}")
         np.save(os.path.join(code_dir_path, code_file_name), raw_codes)
     except Exception as e:
-        print(f"Error noising encoding {file_path}: {e}. Skipping")
+        print(f"Error noising encoding {audio_path}: {e}. Skipping")
         raise
 
 
@@ -147,30 +126,35 @@ sep_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
 sep_track_paths = [str(file) for file in Path(sep_track_dir_path).glob('*.mp3') if file.is_file()]
 num_sep_track = len(sep_track_paths)
 
+mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.3", 
+                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.5",
+                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.7",
+                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
+
+signal_weights = [0.7, 0.5, 0.3, 0.0]
 
 inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
 inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
-inst_track_paths = [str(file) for file in Path(inst_track_dir_path).glob('*.Instrumental.mp3') if file.is_file()]
-num_inst_track = len(inst_track_paths)
+# inst_track_paths = [str(file) for file in Path(inst_track_dir_path).glob('*.Instrumental.mp3') if file.is_file()]
+# num_inst_track = len(inst_track_paths)
 
 
 if __name__ == "__main__":
     with ThreadPoolExecutor() as executor:
-        encode_futures = [
-            executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track)
-        ]
+        # encode_futures = [
+        #     executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track)
+        # ]
 
-        noise_encode_futures = [
-            executor.map(noise_encode, inst_track_paths, [0.9] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track)
-        ]
+        for i in range(len(signal_weights)):
+            signal_weight = signal_weights[i]
+            mixture_track_dir_path = mixture_track_dir_paths[i]
+            inst_track_paths = [os.path.join(inst_track_dir_path, file.stem + ".Instrumental.mp3") for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
+            num_inst_track = len(inst_track_paths)
+            executor.map(noise_encode, inst_track_paths, [signal_weight] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track)
 
-
-# #decode
-# # reconstruct track
-# npy = "/homes/al4624/Documents/YuE_finetune/test_codes/test.noised.npy"
-# # npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
-# save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_reconstructed.mp3"
-# decode(npy, save_path, codec_model, device)
+        # noise_encode_futures = [
+        #     executor.map(noise_encode, inst_track_paths, [0.9] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track)
+        # ]
 
 
 

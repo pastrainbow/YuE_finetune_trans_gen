@@ -167,3 +167,4 @@ inference/run_infer.sh
 finetune/wandb
 *.bin
 *.idx
+*.out
