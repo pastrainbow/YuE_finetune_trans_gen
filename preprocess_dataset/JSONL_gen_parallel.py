@@ -5,6 +5,8 @@ import os
 import soundfile as sf
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import argparse
+
 
 # -------- Load track and genre data once --------
 track_df_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/preprocess_dataset/fma_metadata/tracks.csv"
@@ -14,8 +16,14 @@ track_df = track_df.rename(columns={'Unnamed: 0': 'track_id'})[['track_id', 'gen
 track_df['track_id'] = track_df['track_id'].astype(int)
 genre_df = pd.read_csv(genre_df_path)
 
-audio_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.1"
-#audio_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/mixture_audio"
+
+parser = argparse.ArgumentParser()
+# Model Configuration:
+parser.add_argument("--audio_dir_path", type=str, help="Audio mixture directory for the tracks that will be included")
+args = parser.parse_args()
+audio_dir_path = args.audio_dir_path
+
+
 codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
 noised_inst_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
 output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
@@ -80,7 +88,7 @@ def process_track(track_info):
     ]
 
     try:
-        json_obj["genres"] = ', '.join(get_genres_from_id(int(track_name)))
+        json_obj["genres"] = ' '.join(get_genres_from_id(int(track_name)))
     except Exception as e:
         print(f"Genre lookup failed for {track_name}: {e}")
         return None
