@@ -111,7 +111,8 @@ def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device, 
 parser = argparse.ArgumentParser()
 parser.add_argument("--num_quantizers", type=int, default=1, help="Number of quantizer layers to use for encoding")
 args = parser.parse_args()
-encoder_bandwith = args.num_quantizers * 0.5 #assuming 16000 Hz sample rate and 320 hop length
+encoder_bandwidth = args.num_quantizers * 0.5 #assuming 16000 Hz sample rate and 320 hop length
+print(f"[DEBUG] encoder target bandwidth is {encoder_bandwidth} kbps, with {args.num_quantizers} quantizer layers.")
 
 #initialise model
 cuda_idx = 0
@@ -153,7 +154,7 @@ inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_nois
 if __name__ == "__main__":
     with ThreadPoolExecutor() as executor:
         # encode_futures = [
-        #     executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track, [encoder_bandwith] * num_inst_track)
+        #     executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track, [encoder_bandwidth] * num_inst_track)
         # ]
 
         for i in range(len(signal_weights)):
@@ -161,10 +162,10 @@ if __name__ == "__main__":
             mixture_track_dir_path = mixture_track_dir_paths[i]
             inst_track_paths = [os.path.join(inst_track_dir_path, file.stem + ".Instrumental.mp3") for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
             num_inst_track = len(inst_track_paths)
-            executor.map(noise_encode, inst_track_paths, [signal_weight] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwith] * num_inst_track)
+            executor.map(noise_encode, inst_track_paths, [signal_weight] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwidth] * num_inst_track)
 
         # noise_encode_futures = [
-        #     executor.map(noise_encode, inst_track_paths, [0.9] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwith] * num_inst_track)
+        #     executor.map(noise_encode, inst_track_paths, [0.9] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwidth] * num_inst_track)
         # ]
 
 
