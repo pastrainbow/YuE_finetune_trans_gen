@@ -126,12 +126,16 @@ sep_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
 sep_track_paths = [str(file) for file in Path(sep_track_dir_path).glob('*.mp3') if file.is_file()]
 num_sep_track = len(sep_track_paths)
 
-mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.3", 
-                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.5",
-                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.7",
-                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
+# mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.3", 
+#                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.5",
+#                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.7",
+#                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
 
-signal_weights = [0.7, 0.5, 0.3, 0.0]
+mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
+
+# signal_weights = [0.7, 0.5, 0.3, 0.0]
+
+signal_weights = [0.0]
 
 inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
 inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
