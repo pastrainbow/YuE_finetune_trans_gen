@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/transformer_cache'
 os.environ['HF_HOME'] = '/vol/bitbucket/al4624/hf_home_cache'
 os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/xdg_cache_home'
@@ -34,15 +35,15 @@ def encode_audio(codec_model, audio_prompt, device, target_bw=0.5):
     return raw_codes[0]
 
 #bottom level/first layer encoding. This is sufficient since we don't need to train stage 2 model
-def encode(audio_path, code_dir_path, codec_model, device):
+def encode(audio_path, code_dir_path, codec_model, device, target_bw=0.5):
     try:
         audio_data = load_audio_mono(audio_path)
-        raw_codes = encode_audio(codec_model, audio_data, device, target_bw=0.5)
+        raw_codes = encode_audio(codec_model, audio_data, device, target_bw)
         code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".npy"
         print(f"Finished encoding file {audio_path}")
         np.save(os.path.join(code_dir_path, code_file_name), raw_codes)
     except Exception as e:
-        print(f"Error encoding {file_path}: {e}. Skipping")
+        print(f"Error encoding {audio_path}: {e}. Skipping")
         raise
 
 
@@ -91,13 +92,13 @@ def noise_file(file_path, signal_weight, sample_rate = 16000):
         print(f"Error processing {file_path}: {e}. Skipping")
         raise
 
-def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device):
+def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device, target_bw=0.5):
     try:
         if (not os.path.exists(audio_path)):
             print(f"File {audio_path} does not exist. Skipping")
             return
         audio_data = noise_file(audio_path, signal_weight)
-        raw_codes = encode_audio(codec_model, audio_data, device, target_bw=0.5)
+        raw_codes = encode_audio(codec_model, audio_data, device, target_bw)
         code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".noised.npy"
         print(f"Finished noising and encoding file {audio_path}")
         np.save(os.path.join(code_dir_path, code_file_name), raw_codes)
@@ -105,6 +106,12 @@ def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device):
         print(f"Error noising encoding {audio_path}: {e}. Skipping")
         raise
 
+
+#determine encoding bandwidth
+parser = argparse.ArgumentParser()
+parser.add_argument("--num_quantizers", type=int, default=1, help="Number of quantizer layers to use for encoding")
+args = parser.parse_args()
+encoder_bandwith = args.num_quantizers * 0.5 #assuming 16000 Hz sample rate and 320 hop length
 
 #initialise model
 cuda_idx = 0
@@ -131,11 +138,11 @@ num_sep_track = len(sep_track_paths)
 #                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.7",
 #                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
 
-mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
+mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"] #modify to specify the tracks to encode
 
 # signal_weights = [0.7, 0.5, 0.3, 0.0]
 
-signal_weights = [0.0]
+signal_weights = [0.0] #modify to specify the noise levels. Must contain equal number of elements as mixture_track_dir_paths
 
 inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
 inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
@@ -146,7 +153,7 @@ inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_nois
 if __name__ == "__main__":
     with ThreadPoolExecutor() as executor:
         # encode_futures = [
-        #     executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track)
+        #     executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track, [encoder_bandwith] * num_inst_track)
         # ]
 
         for i in range(len(signal_weights)):
@@ -154,10 +161,10 @@ if __name__ == "__main__":
             mixture_track_dir_path = mixture_track_dir_paths[i]
             inst_track_paths = [os.path.join(inst_track_dir_path, file.stem + ".Instrumental.mp3") for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
             num_inst_track = len(inst_track_paths)
-            executor.map(noise_encode, inst_track_paths, [signal_weight] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track)
+            executor.map(noise_encode, inst_track_paths, [signal_weight] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwith] * num_inst_track)
 
         # noise_encode_futures = [
-        #     executor.map(noise_encode, inst_track_paths, [0.9] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track)
+        #     executor.map(noise_encode, inst_track_paths, [0.9] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwith] * num_inst_track)
         # ]
 
 
