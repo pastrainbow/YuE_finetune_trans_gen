@@ -1,5 +1,9 @@
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
 import os
+#prevent model from using lab machine cache
+os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/transformer_cache'
+os.environ['HF_HOME'] = '/vol/bitbucket/al4624/hf_home_cache'
+os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/xdg_cache_home'
 import time
 import logging
 import torch

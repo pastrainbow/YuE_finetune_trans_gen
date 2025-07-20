@@ -26,6 +26,7 @@ from mmtokenizer import _MMSentencePieceTokenizer
 from models.soundstream_hubert_new import SoundStream
 from vocoder import build_codec_model, process_audio
 from post_process_audio import replace_low_freq_with_energy_matched
+from mutagen.mp3 import MP3
 
 
 parser = argparse.ArgumentParser()
@@ -40,9 +41,11 @@ parser.add_argument("--stage2_batch_size", type=int, default=4, help="The batch 
 parser.add_argument("--genre_txt", type=str, required=True, help="The file path to a text file containing genre tags that describe the musical style or characteristics (e.g., instrumental, genre, mood, vocal timbre, vocal gender). This is used as part of the generation prompt.")
 parser.add_argument("--lyrics_txt", type=str, required=True, help="The file path to a text file containing the lyrics for the music generation. These lyrics will be processed and split into structured segments to guide the generation process.")
 parser.add_argument("--use_audio_prompt", action="store_true", help="If set, the model will use an audio file as a prompt during generation. The audio file should be specified using --audio_prompt_path.")
-parser.add_argument("--audio_prompt_path", type=str, default="", help="The file path to an audio file to use as a reference prompt when --use_audio_prompt is enabled.")
-parser.add_argument("--prompt_start_time", type=float, default=0.0, help="The start time in seconds to extract the audio prompt from the given audio file.")
-parser.add_argument("--prompt_end_time", type=float, default=30.0, help="The end time in seconds to extract the audio prompt from the given audio file.")
+parser.add_argument("--start_audio_prompt_path", type=str, default="", help="The file path to the starting audio file to use as a reference prompt.")
+parser.add_argument("--end_audio_prompt_path", type=str, default="", help="The file path to the ending audio file to use as a reference prompt.")
+parser.add_argument("--gen_duration", type=float, default=10.0, help="The duration of the transition music to be generated.")
+# parser.add_argument("--prompt_start_time", type=float, default=0.0, help="The start time in seconds to extract the audio prompt from the given audio file.")
+# parser.add_argument("--prompt_end_time", type=float, default=30.0, help="The end time in seconds to extract the audio prompt from the given audio file.")
 parser.add_argument("--use_dual_tracks_prompt", action="store_true", help="If set, the model will use dual tracks as a prompt during generation. The vocal and instrumental files should be specified using --vocal_track_prompt_path and --instrumental_track_prompt_path.")
 parser.add_argument("--vocal_track_prompt_path", type=str, default="", help="The file path to a vocal track file to use as a reference prompt when --use_dual_tracks_prompt is enabled.")
 parser.add_argument("--instrumental_track_prompt_path", type=str, default="", help="The file path to an instrumental track file to use as a reference prompt when --use_dual_tracks_prompt is enabled.")
@@ -62,10 +65,12 @@ parser.add_argument('-r', '--rescale', action='store_true', help='Rescale output
 
 
 args = parser.parse_args()
-if args.use_audio_prompt and not args.audio_prompt_path:
-    raise FileNotFoundError("Please offer audio prompt filepath using '--audio_prompt_path', when you enable 'use_audio_prompt'!")
+if args.use_audio_prompt and not (args.start_audio_prompt_path and args.end_audio_prompt_path):
+    raise FileNotFoundError("Please offer audio prompt filepaths using '--start_audio_prompt_path' and '--end_audio_prompt_path', when you enable 'use_audio_prompt'!")
 if args.use_dual_tracks_prompt and not args.vocal_track_prompt_path and not args.instrumental_track_prompt_path:
     raise FileNotFoundError("Please offer dual tracks prompt filepath using '--vocal_track_prompt_path' and '--inst_decoder_path', when you enable '--use_dual_tracks_prompt'!")
+if args.gen_duration <= 0:
+    raise ValueError(f"Transition duration has value {args.gen_duration}, invalid!")
 stage1_model = args.stage1_model
 stage2_model = args.stage2_model
 cuda_idx = args.cuda_idx
@@ -140,6 +145,41 @@ def split_lyrics(lyrics):
     structured_lyrics = [f"[{seg[0]}]\n{seg[1].strip()}\n\n" for seg in segments]
     return structured_lyrics
 
+def gen_ICL_trans_gen_instruction(start_audio_path, gen_duration, token_fps=50):
+    """
+    Generate the instruction prompt text
+    We need the start audio duration and the transtion duration to know the time positin of the middle segment
+    """
+
+    start_audio_duration = MP3(start_audio_path).info.length
+    middle_start = int(start_audio_duration * token_fps)
+    middle_end = int((start_audio_duration + gen_duration) * token_fps)
+    instruction = (
+        f"Given a music track where the middle segment (from token {middle_start} to token {middle_end}) is corrupted by noise, " 
+        "generate a clean version of the track where the middle segment matches the style, instrumentation, and rhythm of the surrounding segments (before and after the noise), " 
+        "Use the beginning and end segments as references to reconstruct the missing or damaged section smoothly, ensuring seamless musical continuity."
+    )
+
+    return instruction
+
+def noise_gen_gaussian(range_factor, frame_count):
+    mean = 0.0
+    #portion of values in range = 1 - 1 / range_factor^2
+    #value range is 1 here
+    std = 1.0 / range_factor
+    
+    # Gaussian noise: create a random normal distribution that has the same size as the data to add noise to 
+    return np.random.normal(mean, std, frame_count)
+
+def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
+    range_factor = 4 #for gaussian noise generation
+    start_audio_data = load_audio_mono(start_audio_path)[0]
+    end_audio_data = load_audio_mono(end_audio_path)[0]
+    noise_data = noise_gen_gaussian(range_factor, noise_duration * sample_rate)
+    concat_data = np.concatenate((start_audio_data, noise_data, end_audio_data))
+    return torch.from_numpy(concat_data).reshape(1, -1)
+
+
 # Call the function and print the result
 stage1_output_set = []
 # Tips:
@@ -151,7 +191,8 @@ with open(args.lyrics_txt) as f:
     lyrics = split_lyrics(f.read())
 # intruction
 full_lyrics = "\n".join(lyrics)
-prompt_texts = [f"Generate music from the given lyrics segment by segment.\n[Genre] {genres}\n{full_lyrics}"]
+instruction = gen_ICL_trans_gen_instruction(args.start_audio_prompt_path, args.gen_duration)
+prompt_texts = [f"{instruction}\n[Genre] {genres}\n{full_lyrics}"]
 prompt_texts += lyrics
 
 
@@ -174,21 +215,23 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
     if i==1:
         if args.use_dual_tracks_prompt or args.use_audio_prompt:
             if args.use_dual_tracks_prompt:
-                vocals_ids = load_audio_mono(args.vocal_track_prompt_path)
-                instrumental_ids = load_audio_mono(args.instrumental_track_prompt_path)
-                vocals_ids = encode_audio(codec_model, vocals_ids, device, target_bw=0.5)
-                instrumental_ids = encode_audio(codec_model, instrumental_ids, device, target_bw=0.5)
-                vocals_ids = codectool.npy2ids(vocals_ids[0])
-                instrumental_ids = codectool.npy2ids(instrumental_ids[0])
-                ids_segment_interleaved = rearrange([np.array(vocals_ids), np.array(instrumental_ids)], 'b n -> (n b)')
-                audio_prompt_codec = ids_segment_interleaved[int(args.prompt_start_time*50*2): int(args.prompt_end_time*50*2)]
-                audio_prompt_codec = audio_prompt_codec.tolist()
+                raise ValueError("Only supports single track audio prompt for now.")
+                # vocals_ids = load_audio_mono(args.vocal_track_prompt_path)
+                # instrumental_ids = load_audio_mono(args.instrumental_track_prompt_path)
+                # vocals_ids = encode_audio(codec_model, vocals_ids, device, target_bw=0.5)
+                # instrumental_ids = encode_audio(codec_model, instrumental_ids, device, target_bw=0.5)
+                # vocals_ids = codectool.npy2ids(vocals_ids[0])
+                # instrumental_ids = codectool.npy2ids(instrumental_ids[0])
+                # ids_segment_interleaved = rearrange([np.array(vocals_ids), np.array(instrumental_ids)], 'b n -> (n b)')
+                # audio_prompt_codec = ids_segment_interleaved[int(args.prompt_start_time*50*2): int(args.prompt_end_time*50*2)]
+                # audio_prompt_codec = audio_prompt_codec.tolist()
             elif args.use_audio_prompt:
-                audio_prompt = load_audio_mono(args.audio_prompt_path)
+                audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration)
                 raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
                 # Format audio prompt
                 code_ids = codectool.npy2ids(raw_codes[0])
-                audio_prompt_codec = code_ids[int(args.prompt_start_time *50): int(args.prompt_end_time *50)] # 50 is tps of xcodec
+                # audio_prompt_codec = code_ids[int(args.prompt_start_time *50): int(args.prompt_end_time *50)] # 50 is tps of xcodec
+                audio_prompt_codec = code_ids #no slicing
             audio_prompt_codec_ids = [mmtokenizer.soa] + codectool.sep_ids + audio_prompt_codec + [mmtokenizer.eoa]
             sentence_ids = mmtokenizer.tokenize("[start_of_reference]") +  audio_prompt_codec_ids + mmtokenizer.tokenize("[end_of_reference]")
             head_id = mmtokenizer.tokenize(prompt_texts[0]) + sentence_ids
