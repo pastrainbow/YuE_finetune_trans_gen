@@ -24,9 +24,13 @@ args = parser.parse_args()
 audio_dir_path = args.audio_dir_path
 
 
-codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
-noised_inst_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
-output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
+# codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
+# noised_inst_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
+# output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
+
+codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/sep_codes"
+noised_inst_codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes"
+output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/output_json/output.jsonl"
 
 start_lyrics = "[beginning]\n\n"
 middle_lyrics = "[middle]\n\n"
@@ -88,7 +92,7 @@ def process_track(track_info):
     ]
 
     try:
-        json_obj["genres"] = ' '.join(get_genres_from_id(int(track_name)) + "clean")
+        json_obj["genres"] = ' '.join(get_genres_from_id(int(track_name)) + ["clean"])
     except Exception as e:
         print(f"Genre lookup failed for {track_name}: {e}")
         return None

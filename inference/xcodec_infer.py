@@ -127,10 +127,10 @@ codec_model.to(device)
 codec_model.eval()
 
 #encode
-sep_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
-sep_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
-# sep_track_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original"
-# sep_code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_codes"
+# sep_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
+# sep_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
+sep_track_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/sep_audio"
+sep_code_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/sep_codes"
 sep_track_paths = [str(file) for file in Path(sep_track_dir_path).glob('*.mp3') if file.is_file()]
 num_sep_track = len(sep_track_paths)
 
@@ -139,14 +139,17 @@ num_sep_track = len(sep_track_paths)
 #                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.7",
 #                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
 
-mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"] #modify to specify the tracks to encode
-
+# mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"] #modify to specify the tracks to encode
+mixture_track_dir_paths = ["/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/mixture_audio"] 
 # signal_weights = [0.7, 0.5, 0.3, 0.0]
 
-signal_weights = [0.0] #modify to specify the noise levels. Must contain equal number of elements as mixture_track_dir_paths
+signal_weights = [1.0] #modify to specify the noise levels. Must contain equal number of elements as mixture_track_dir_paths
 
-inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep" #modify to specify the directory for the instrumental audio tracks
-inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes" #modify to specify the directory for outputting the noised instrumental codes
+# inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep" #modify to specify the directory for the instrumental audio tracks
+# inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes" #modify to specify the directory for outputting the noised instrumental codes
+inst_track_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/sep_audio"
+inst_code_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes"
+
 
 # inst_track_paths = [str(file) for file in Path(inst_track_dir_path).glob('*.Instrumental.mp3') if file.is_file()]
 # num_inst_track = len(inst_track_paths)
@@ -154,9 +157,9 @@ inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_nois
 
 if __name__ == "__main__":
     with ThreadPoolExecutor() as executor:
-        # encode_futures = [
-        #     executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track, [encoder_bandwidth] * num_inst_track)
-        # ]
+        encode_futures = [
+            executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track, [encoder_bandwidth] * num_sep_track)
+        ]
 
         for i in range(len(signal_weights)):
             signal_weight = signal_weights[i]
