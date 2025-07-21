@@ -27,7 +27,8 @@ if [ "$DATA_SETTING" == "dummy" ]; then
        QUANTIZER_BEGIN_IDX=0
        NUM_QUANTIZERS=1
 elif [ "$DATA_SETTING" == "trans_gen" ]; then
-       DATA_ROOT=/vol/bitbucket/al4624/finetune_dataset/example
+    #    DATA_ROOT=/vol/bitbucket/al4624/finetune_dataset/example
+       DATA_ROOT=example #testing
        NAME_PREFIX=trans_gen.msa.xcodec_16k
        CODEC_TYPE=xcodec
        INSTRUCTION="" #Unused
