@@ -215,7 +215,7 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
     if i==1:
         if args.use_dual_tracks_prompt or args.use_audio_prompt:
             if args.use_dual_tracks_prompt:
-                raise ValueError("Only supports single track audio prompt for now.")
+                raise ValueError("Only supports single track audio prompt for transition generation for now.")
                 # vocals_ids = load_audio_mono(args.vocal_track_prompt_path)
                 # instrumental_ids = load_audio_mono(args.instrumental_track_prompt_path)
                 # vocals_ids = encode_audio(codec_model, vocals_ids, device, target_bw=0.5)

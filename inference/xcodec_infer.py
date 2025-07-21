@@ -111,7 +111,7 @@ def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device, 
 parser = argparse.ArgumentParser()
 parser.add_argument("--num_quantizers", type=int, default=1, help="Number of quantizer layers to use for encoding")
 args = parser.parse_args()
-encoder_bandwidth = args.num_quantizers * 0.5 #assuming 16000 Hz sample rate and 320 hop length
+encoder_bandwidth = args.num_quantizers * 0.5 #assuming 16000 Hz sample rate and 320 hop length, which is the original config for Xcodec
 print(f"[DEBUG] encoder target bandwidth is {encoder_bandwidth} kbps, with {args.num_quantizers} quantizer layers.")
 
 #initialise model
@@ -145,8 +145,9 @@ mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep
 
 signal_weights = [0.0] #modify to specify the noise levels. Must contain equal number of elements as mixture_track_dir_paths
 
-inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
-inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
+inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep" #modify to specify the directory for the instrumental audio tracks
+inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes" #modify to specify the directory for outputting the noised instrumental codes
+
 # inst_track_paths = [str(file) for file in Path(inst_track_dir_path).glob('*.Instrumental.mp3') if file.is_file()]
 # num_inst_track = len(inst_track_paths)
 
