@@ -300,7 +300,7 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
 
             # audio_prompt_codec_ids = [mmtokenizer.soa] + codectool.sep_ids + audio_prompt_codec + [mmtokenizer.eoa]
             audio_prompt_codec_ids = prompt_codec_ids
-            reference_genre_str = '[Genre] noisy\n'
+            reference_genre_str = f'[Genre] {genres} noisy\n'
             sentence_ids = mmtokenizer.tokenize("[start_of_reference]") + mmtokenizer.tokenize(reference_genre_str) + audio_prompt_codec_ids + mmtokenizer.tokenize("[end_of_reference]")
             head_id = mmtokenizer.tokenize(prompt_texts[0]) + sentence_ids
         else:
