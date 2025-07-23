@@ -400,7 +400,7 @@ class Encoder(EncoderBase):
                 #     raw_codec_mixture_prompt = raw_codec_mixture
 
                 # vocals_ids_prompt = Encoder.codectool.npy2ids(raw_codec_vocals_prompt)
-                instrumental_ids_prompt = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt)
+                # instrumental_ids_prompt = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt)
 
                 # Check if ids are valid lists/arrays
                 # if not isinstance(vocals_ids_prompt, (list, np.ndarray)) or not isinstance(instrumental_ids_prompt, (list, np.ndarray)):
@@ -408,8 +408,8 @@ class Encoder(EncoderBase):
                 # if len(vocals_ids_prompt) == 0:
                 #     raise ValueError("Empty codec IDs generated for prompt segment")
 
-                options_codecs = {}
-                codec_step = 1 # How many codec tokens per original frame
+                # options_codecs = {}
+                # codec_step = 1 # How many codec tokens per original frame
                 selected_option = self.args.audio_prompt_mode
 
                 if selected_option == "dual":
@@ -518,11 +518,11 @@ class Encoder(EncoderBase):
                         if DEBUG: print(f"[Prompt segmenting] Segment frame length is zero or negative in {data['id']}: {frame_end - frame_start}. Skipping.")
                         continue
 
-                    raw_codec_instrumental_prompt_segment = raw_codec_instrumental[:, frame_start:frame_end]
+                    raw_codec_instrumental_prompt_segment = raw_codec_instrumental_prompt[:, frame_start:frame_end]
 
                     # --- Tokenize Text ---
                     text_ids = []
-                    text = '[Genre] noisy\n' # Initialize text to label prompt as noisy audio
+                    text = ''
                     if self.args.cot or self.args.use_audio_icl: # CoT/ICL uses only line content for segment text
                         text += line_content
                     else: # Standard non-CoT mode
@@ -583,11 +583,13 @@ class Encoder(EncoderBase):
 
             # Construct ICL-CoT Header
             genre_str = '[Genre] ' + data['genres']
+            reference_genre_str = '[Genre] noisy\n'
             complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
-            # Format: <Instruction> \n <Genre> \n <Lyrics> [start_of_reference] <Prompt> [end_of_reference]
+            # Format: <Instruction> \n <Genre> \n <Lyrics> [start_of_reference] <Genre> <segments> [end_of_reference]
             head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
             head_ids = (Encoder.tokenizer.tokenize(head) +
                         Encoder.tokenizer.tokenize("[start_of_reference]") +
+                        Encoder.tokenizer.tokenize(reference_genre_str) + 
                         audio_prompt_codec_ids +
                         Encoder.tokenizer.tokenize("[end_of_reference]"))
             doc_ids.extend(head_ids)

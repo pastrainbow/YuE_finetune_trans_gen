@@ -112,6 +112,7 @@ codec_model.load_state_dict(parameter_dict['codec_model'])
 codec_model.to(device)
 codec_model.eval()
 
+
 class BlockTokenRangeProcessor(LogitsProcessor):
     def __init__(self, start_id, end_id):
         self.blocked_token_ids = list(range(start_id, end_id))
@@ -145,22 +146,36 @@ def split_lyrics(lyrics):
     structured_lyrics = [f"[{seg[0]}]\n{seg[1].strip()}\n\n" for seg in segments]
     return structured_lyrics
 
-def gen_ICL_trans_gen_instruction(start_audio_path, gen_duration, token_fps=50):
-    """
-    Generate the instruction prompt text
-    We need the start audio duration and the transtion duration to know the time positin of the middle segment
-    """
-
-    start_audio_duration = MP3(start_audio_path).info.length
-    middle_start = int(start_audio_duration * token_fps)
-    middle_end = int((start_audio_duration + gen_duration) * token_fps)
+def gen_ICL_trans_gen_instruction():    
     instruction = (
-        f"Given a music track where the middle segment (from token {middle_start} to token {middle_end}) is corrupted by noise, " 
-        "generate a clean version of the track where the middle segment matches the style, instrumentation, and rhythm of the surrounding segments (before and after the noise), " 
-        "Use the beginning and end segments as references to reconstruct the missing or damaged section smoothly, ensuring seamless musical continuity."
+        f"Given a music track where the middle segment is corrupted by noise, " 
+        "generate a clean version of the track where the middle segment matches the style, instrumentation, and rhythm of the surrounding segments (before and after the middle segment), " 
+        "Use the beginning and end segments as references to reconstruct the damaged middle segment smoothly, ensuring seamless musical continuity."
     )
 
     return instruction
+
+
+def get_segment_info(start_audio_path, end_audio_path, gen_duration, token_fps = 50):
+    """
+    Get the time positions of the start, middle and end segments
+    """
+    start_audio_duration = MP3(start_audio_path).info.length
+    end_audio_duraiton = MP3(end_audio_path).info.length
+
+    start_audio_end = int(start_audio_duration * token_fps)
+
+    middle_audio_end = start_audio_end + int(gen_duration * token_fps)
+
+    end_audio_end = int((start_audio_duration + gen_duration + end_audio_duraiton) * token_fps)
+
+    #We use line_content as the label to match the training data format
+    segments = [{'line_content': "[beginning]\n\n", 'start': 0, 'end': start_audio_end}, 
+                {'line_content': "[middle]\n\n" , 'start': start_audio_end, 'end': middle_audio_end}, 
+                {'line_content': "[end]\n\n", 'start': middle_audio_end, 'end': end_audio_end}]
+
+    return segments
+
 
 def noise_gen_gaussian(range_factor, frame_count):
     mean = 0.0
@@ -191,7 +206,7 @@ with open(args.lyrics_txt) as f:
     lyrics = split_lyrics(f.read())
 # intruction
 full_lyrics = "\n".join(lyrics)
-instruction = gen_ICL_trans_gen_instruction(args.start_audio_prompt_path, args.gen_duration)
+instruction = gen_ICL_trans_gen_instruction()
 prompt_texts = [f"{instruction}\n[Genre] {genres}\n{full_lyrics}"]
 prompt_texts += lyrics
 
@@ -214,6 +229,9 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
         continue
     if i==1:
         if args.use_dual_tracks_prompt or args.use_audio_prompt:
+
+            prompt_codec_ids = []
+
             if args.use_dual_tracks_prompt:
                 raise ValueError("Only supports single track audio prompt for transition generation for now.")
                 # vocals_ids = load_audio_mono(args.vocal_track_prompt_path)
@@ -232,8 +250,58 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
                 code_ids = codectool.npy2ids(raw_codes[0])
                 # audio_prompt_codec = code_ids[int(args.prompt_start_time *50): int(args.prompt_end_time *50)] # 50 is tps of xcodec
                 audio_prompt_codec = code_ids #no slicing
-            audio_prompt_codec_ids = [mmtokenizer.soa] + codectool.sep_ids + audio_prompt_codec + [mmtokenizer.eoa]
-            sentence_ids = mmtokenizer.tokenize("[start_of_reference]") +  audio_prompt_codec_ids + mmtokenizer.tokenize("[end_of_reference]")
+
+                #produce segment infos
+                segments = get_segment_info(args.start_audio_prompt_path, args.end_audio_prompt_path,  args.gen_duration)
+
+                 # --- Process Individual Segments to create CoT data for prompt ---
+                for segment in segments:
+                    frame_start = segment.get('start')
+                    frame_end = segment.get('end')
+                    line_content = segment.get('line_content')
+
+                    raw_codec_instrumental_prompt_segment = raw_codes[:, frame_start:frame_end]
+
+                    # --- Tokenize Text ---
+                    text_ids = []
+                    text = ''
+                    text += line_content
+                    text_ids = mmtokenizer.tokenize(text)
+
+                    # --- Process Codec ---
+                    try:
+                        instrumental_prompt_ids_seg = codectool.npy2ids(raw_codec_instrumental_prompt_segment)
+
+                        if  not isinstance(instrumental_prompt_ids_seg, (list, np.ndarray)):
+                            raise TypeError("npy2ids did not return a list or ndarray for segment")
+
+                        prompt_ids_segment = np.array(instrumental_prompt_ids_seg)
+                        prompt_ids_segment_list = list(prompt_ids_segment)
+
+                        # --- Construct Segment Tokens ---
+                        segment_tokens = []
+
+                        # Format for CoT/ICL-CoT: [start_of_segment] <text> <SOA> <sep> <interleaved_codec> <EOA> [end_of_segment]
+                        segment_tokens = (mmtokenizer.tokenize('[start_of_segment]') +
+                                        text_ids +
+                                        [mmtokenizer.soa] + codectool.sep_ids +
+                                        prompt_ids_segment_list +
+                                        [mmtokenizer.eoa] +
+                                        mmtokenizer.tokenize('[end_of_segment]'))
+
+                        prompt_codec_ids.extend(segment_tokens)
+
+                    except Exception as e:
+                        mode_str = "(ICL-CoT)"
+                        print(f"Error processing prompt segment in encode_token_level_interleave {mode_str}: {e}")
+                        print(f"Segment: {segment}")
+                        print(f"Text Input: {text}") # Print the text that was tokenized
+
+
+            # audio_prompt_codec_ids = [mmtokenizer.soa] + codectool.sep_ids + audio_prompt_codec + [mmtokenizer.eoa]
+            audio_prompt_codec_ids = prompt_codec_ids
+            reference_genre_str = '[Genre] noisy\n'
+            sentence_ids = mmtokenizer.tokenize("[start_of_reference]") + mmtokenizer.tokenize(reference_genre_str) + audio_prompt_codec_ids + mmtokenizer.tokenize("[end_of_reference]")
             head_id = mmtokenizer.tokenize(prompt_texts[0]) + sentence_ids
         else:
             head_id = mmtokenizer.tokenize(prompt_texts[0])
