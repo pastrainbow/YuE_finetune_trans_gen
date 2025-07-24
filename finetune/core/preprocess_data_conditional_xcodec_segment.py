@@ -521,7 +521,7 @@ class Encoder(EncoderBase):
 
 
             # Construct ICL-CoT Header
-            genre_str = '[Genre] ' + data['genres']
+            genre_str = '[Genre] ' + data['genres'] + ' clean'
             reference_genre_str = '[Genre] ' + data['genres'] + ' noisy\n'
             complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
             # Format: <Instruction> \n <Genre> \n <Lyrics> [start_of_reference] <Genre> <segments> [end_of_reference]
