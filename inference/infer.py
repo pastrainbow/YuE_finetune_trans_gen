@@ -190,8 +190,8 @@ def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate
     range_factor = 4 #for gaussian noise generation
     start_audio_data = load_audio_mono(start_audio_path)[0]
     end_audio_data = load_audio_mono(end_audio_path)[0]
-    noise_data = noise_gen_gaussian(range_factor, noise_duration * sample_rate)
-    concat_data = np.concatenate((start_audio_data, noise_data, end_audio_data))
+    noise_data = noise_gen_gaussian(range_factor, int(noise_duration * sample_rate))
+    concat_data = np.concatenate((start_audio_data, noise_data, end_audio_data)).astype(np.float32)
     return torch.from_numpy(concat_data).reshape(1, -1)
 
 
@@ -207,7 +207,7 @@ with open(args.lyrics_txt) as f:
 # intruction
 full_lyrics = "\n".join(lyrics)
 instruction = gen_ICL_trans_gen_instruction()
-prompt_texts = [f"{instruction}\n[Genre] {genres}\n{full_lyrics}"]
+prompt_texts = [f"{instruction}\n[Genre] {genres} clean\n{full_lyrics}"]
 prompt_texts += lyrics
 
 

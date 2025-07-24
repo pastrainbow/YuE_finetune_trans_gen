@@ -92,7 +92,7 @@ def process_track(track_info):
     ]
 
     try:
-        json_obj["genres"] = ' '.join(get_genres_from_id(int(track_name)) + ["clean"])
+        json_obj["genres"] = ' '.join(get_genres_from_id(int(track_name)))
     except Exception as e:
         print(f"Genre lookup failed for {track_name}: {e}")
         return None
