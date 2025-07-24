@@ -186,14 +186,22 @@ def noise_gen_gaussian(range_factor, frame_count):
     # Gaussian noise: create a random normal distribution that has the same size as the data to add noise to 
     return np.random.normal(mean, std, frame_count)
 
-def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
-    range_factor = 4 #for gaussian noise generation
-    start_audio_data = load_audio_mono(start_audio_path)[0]
-    end_audio_data = load_audio_mono(end_audio_path)[0]
-    noise_data = noise_gen_gaussian(range_factor, int(noise_duration * sample_rate))
-    concat_data = np.concatenate((start_audio_data, noise_data, end_audio_data)).astype(np.float32)
-    return torch.from_numpy(concat_data).reshape(1, -1)
+# def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
+#     range_factor = 4 #for gaussian noise generation
+#     start_audio_data = load_audio_mono(start_audio_path)[0]
+#     end_audio_data = load_audio_mono(end_audio_path)[0]
+#     noise_data = noise_gen_gaussian(range_factor, int(noise_duration * sample_rate))
+#     concat_data = np.concatenate((start_audio_data, noise_data, end_audio_data)).astype(np.float32)
+#     return torch.from_numpy(concat_data).reshape(1, -1)
 
+def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
+    range_factor = 4  # for gaussian noise generation
+    start_audio_data = load_audio_mono(start_audio_path)[0]  # shape: [T]
+    end_audio_data = load_audio_mono(end_audio_path)[0]      # shape: [T]
+    noise_np = noise_gen_gaussian(range_factor, noise_duration * sample_rate)
+    noise_data = torch.from_numpy(noise_np.astype(np.float32))  # convert to tensor
+    concat_data = torch.cat((start_audio_data, noise_data, end_audio_data), dim=0)
+    return concat_data.unsqueeze(0)  # shape: [1, T]
 
 # Call the function and print the result
 stage1_output_set = []
