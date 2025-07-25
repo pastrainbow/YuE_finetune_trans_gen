@@ -26,7 +26,7 @@ audio_dir_path = args.audio_dir_path
 
 codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
 noised_inst_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
-output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
+output_jsonl_path = "/vol/bitbucket/al4624/finetune_dataset/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
 
 start_lyrics = "[beginning]\n\n"
 middle_lyrics = "[middle]\n\n"

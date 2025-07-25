@@ -225,7 +225,7 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
             elif args.use_audio_prompt:
                 audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration)
                 raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
-                max_new_tokens = len(raw_codes[0])
+                max_new_tokens = len(raw_codes[0][0])
                 print(f"[DEBUG] max_new_tokens is set to {max_new_tokens}")
                 # Format audio prompt
                 code_ids = codectool.npy2ids(raw_codes[0])
