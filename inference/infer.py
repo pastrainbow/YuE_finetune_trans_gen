@@ -388,6 +388,7 @@ def stage2_generate(model, prompt, batch_size=16):
     return output
 
 def stage2_inference(model, stage1_output_set, stage2_output_dir, batch_size=4):
+    print(f"[DEBUG] stage 1 output: {stage1_output_set}")
     stage2_result = []
     for i in tqdm(range(len(stage1_output_set))):
         output_filename = os.path.join(stage2_output_dir, os.path.basename(stage1_output_set[i]))
