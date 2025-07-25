@@ -1,8 +1,8 @@
 import os
 #prevent model from using lab machine cache
-os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/transformer_cache'
-os.environ['HF_HOME'] = '/vol/bitbucket/al4624/hf_home_cache'
-os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/xdg_cache_home'
+os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/inference_cache/transformer_cache'
+os.environ['HF_HOME'] = '/vol/bitbucket/al4624/inference_cache/hf_home_cache'
+os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/inference_cache/xdg_cache_home'
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer'))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer', 'descriptaudiocodec'))
@@ -33,7 +33,6 @@ parser = argparse.ArgumentParser()
 # Model Configuration:
 parser.add_argument("--stage1_model", type=str, default="m-a-p/YuE-s1-7B-anneal-en-cot", help="The model checkpoint path or identifier for the Stage 1 model.")
 parser.add_argument("--stage2_model", type=str, default="m-a-p/YuE-s2-1B-general", help="The model checkpoint path or identifier for the Stage 2 model.")
-parser.add_argument("--max_new_tokens", type=int, default=3000, help="The maximum number of new tokens to generate in one pass during text generation.")
 parser.add_argument("--repetition_penalty", type=float, default=1.1, help="repetition_penalty ranges from 1.0 to 2.0 (or higher in some cases). It controls the diversity and coherence of the audio tokens generated. The higher the value, the greater the discouragement of repetition. Setting value to 1.0 means no penalty.")
 parser.add_argument("--run_n_segments", type=int, default=2, help="The number of segments to process during the generation.")
 parser.add_argument("--stage2_batch_size", type=int, default=4, help="The batch size used in Stage 2 inference.")
@@ -44,8 +43,6 @@ parser.add_argument("--use_audio_prompt", action="store_true", help="If set, the
 parser.add_argument("--start_audio_prompt_path", type=str, default="", help="The file path to the starting audio file to use as a reference prompt.")
 parser.add_argument("--end_audio_prompt_path", type=str, default="", help="The file path to the ending audio file to use as a reference prompt.")
 parser.add_argument("--gen_duration", type=float, default=10.0, help="The duration of the transition music to be generated.")
-# parser.add_argument("--prompt_start_time", type=float, default=0.0, help="The start time in seconds to extract the audio prompt from the given audio file.")
-# parser.add_argument("--prompt_end_time", type=float, default=30.0, help="The end time in seconds to extract the audio prompt from the given audio file.")
 parser.add_argument("--use_dual_tracks_prompt", action="store_true", help="If set, the model will use dual tracks as a prompt during generation. The vocal and instrumental files should be specified using --vocal_track_prompt_path and --instrumental_track_prompt_path.")
 parser.add_argument("--vocal_track_prompt_path", type=str, default="", help="The file path to a vocal track file to use as a reference prompt when --use_dual_tracks_prompt is enabled.")
 parser.add_argument("--instrumental_track_prompt_path", type=str, default="", help="The file path to an instrumental track file to use as a reference prompt when --use_dual_tracks_prompt is enabled.")
@@ -74,7 +71,7 @@ if args.gen_duration <= 0:
 stage1_model = args.stage1_model
 stage2_model = args.stage2_model
 cuda_idx = args.cuda_idx
-max_new_tokens = args.max_new_tokens
+max_new_tokens = 0 #initalised to 0, set to appropriate value after ICL audio prompt is generated
 stage1_output_dir = os.path.join(args.output_dir, f"stage1")
 stage2_output_dir = stage1_output_dir.replace('stage1', 'stage2')
 os.makedirs(stage1_output_dir, exist_ok=True)
@@ -196,7 +193,6 @@ instruction = gen_ICL_trans_gen_instruction(args.start_audio_prompt_path, args.g
 prompt_texts = [f"{instruction}\n[Genre] {genres}\n{full_lyrics}"]
 prompt_texts += lyrics
 
-
 random_id = uuid.uuid4()
 output_seq = None
 # Here is suggested decoding config
@@ -229,6 +225,8 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
             elif args.use_audio_prompt:
                 audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration)
                 raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
+                max_new_tokens = len(raw_codes[0])
+                print(f"[DEBUG] max_new_tokens is set to {max_new_tokens}")
                 # Format audio prompt
                 code_ids = codectool.npy2ids(raw_codes[0])
                 # audio_prompt_codec = code_ids[int(args.prompt_start_time *50): int(args.prompt_end_time *50)] # 50 is tps of xcodec

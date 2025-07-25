@@ -52,7 +52,7 @@ codec_model.eval()
 
 #decode
 # reconstruct track
-npy = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes/066893.Instrumental.noised.npy"
+npy = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes/155310.Instrumental.noised.npy"
 # npy = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/npy/dummy.npy"
 save_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original/test_inst_noised_reconstructed.mp3"
 decode(npy, save_path, codec_model, device)
