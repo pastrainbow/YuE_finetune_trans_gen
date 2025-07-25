@@ -64,10 +64,8 @@ def add_noise(audio_data, noise_data, signal_weight):
 
 def noise_file(file_path, signal_weight, sample_rate = 16000):
     try:
-        #mono conversion - YuE only supports mono audio
         audio_data = load_audio_mono(file_path)[0].numpy()
         frame_count = len(audio_data)
-        #if training examples are of the same length, we can just calculate this once for the first training example
         #split to 3 segments: start, middle and end
         segment_frame_count = int(frame_count / 3)
         middle_segment_start = segment_frame_count
@@ -86,11 +84,12 @@ def noise_file(file_path, signal_weight, sample_rate = 16000):
         np.clip(audio_data_middle, -1.0, 1.0, out = audio_data_middle)
 
         print(f"File {file_path} finished noising. Middle segement starts at {middle_segment_start / sample_rate}, ends at {middle_segment_end / sample_rate} ")
-        return torch.from_numpy(np.array([audio_data]))
+        return torch.from_numpy(audio_data).unsqueeze(0).to(dtype=torch.float32)
     #FMA dataset has corrupted files. It is normal for a few files to fail the processing.
     except Exception as e:
         print(f"Error processing {file_path}: {e}. Skipping")
         raise
+
 
 def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device, target_bw=0.5):
     try:

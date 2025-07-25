@@ -52,24 +52,11 @@ def get_size_in_bytes(arr):
     """Returns the size of a numpy array in bytes."""
     return arr.nbytes
 
-# def inverse_transform_sampling(cdf, x_values, num_samples=1):
-#     """
-#     Performs inverse transform sampling given a CDF.
-#     Used for sampling audio prompt lengths in ICL mode.
-#     """
-#     # Generate uniformly distributed random numbers
-#     r = np.random.rand(num_samples)
-#     # Find corresponding x values using interpolation on the CDF
-#     random_samples = np.interp(r, cdf, x_values)
-#     return random_samples
-
 class Encoder(EncoderBase):
     """
     Encodes JSON lines into token IDs for different preprocessing modes.
     Handles text, codec, token-level interleaving, CoT, and ICL.
     """
-    # Placeholders for CDF values used in inverse_transform_sampling for ICL.
-    # These should ideally be loaded from configuration or data.
 
     def __init__(self, args):
         super().__init__(args)
@@ -413,7 +400,7 @@ class Encoder(EncoderBase):
                 #     raise ValueError("Empty codec IDs generated for prompt segment")
 
                 options_codecs = {}
-                codec_step = 1 # How many codec tokens per original frame
+                # codec_step = 1 # How many codec tokens per original frame
                 selected_option = self.args.audio_prompt_mode
 
                 if selected_option == "dual":
