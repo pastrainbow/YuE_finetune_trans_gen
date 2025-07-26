@@ -42,7 +42,7 @@ parser.add_argument("--lyrics_txt", type=str, required=True, help="The file path
 parser.add_argument("--use_audio_prompt", action="store_true", help="If set, the model will use an audio file as a prompt during generation. The audio file should be specified using --audio_prompt_path.")
 parser.add_argument("--start_audio_prompt_path", type=str, default="", help="The file path to the starting audio file to use as a reference prompt.")
 parser.add_argument("--end_audio_prompt_path", type=str, default="", help="The file path to the ending audio file to use as a reference prompt.")
-parser.add_argument("--gen_duration", type=float, default=10.0, help="The duration of the transition music to be generated.")
+parser.add_argument("--gen_duration", type=float, default=10.0, help="The duration of the middle transition music to be generated.")
 parser.add_argument("--use_dual_tracks_prompt", action="store_true", help="If set, the model will use dual tracks as a prompt during generation. The vocal and instrumental files should be specified using --vocal_track_prompt_path and --instrumental_track_prompt_path.")
 parser.add_argument("--vocal_track_prompt_path", type=str, default="", help="The file path to a vocal track file to use as a reference prompt when --use_dual_tracks_prompt is enabled.")
 parser.add_argument("--instrumental_track_prompt_path", type=str, default="", help="The file path to an instrumental track file to use as a reference prompt when --use_dual_tracks_prompt is enabled.")
