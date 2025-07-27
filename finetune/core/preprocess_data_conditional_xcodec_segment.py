@@ -62,108 +62,6 @@ class Encoder(EncoderBase):
         super().__init__(args)
         self.args = args
 
-    def encode_mix_text_and_codec(self, json_line):
-        """Encodes text and codec data, simple concatenation based on order."""
-        if DEBUG: print("[FINETUNE] Function encode_mix_text_and_codec called.")
-        data = json.loads(json_line)
-        assert 'text' in data and 'codec' in data, "`text` and `codec` must be in the json key"
-
-        ids = {}
-        lens = {}
-
-        segmented_lyrics = data['splitted_lyrics']['segmented_lyrics']
-        raw_codec = np.load(data['codec'])
-
-        full_length_of_song = data['audio_length_in_sec']
-        # Handle potential division by zero or invalid full_length_of_song
-        if full_length_of_song <= 0:
-             print(f"Warning: Invalid audio_length_in_sec={full_length_of_song} in {data.get('id', 'unknown')}. Skipping.")
-             return {}, {}, 0 # Return empty results and 0 bytes processed
-        fps = raw_codec.shape[1] / full_length_of_song
-
-        doc_ids = []
-        sentence_lens = [] # here sentence means segment
-        for segment in segmented_lyrics:
-            duration = segment['duration']
-            # Relaxed fps check allowing exactly 50.0
-            # if fps > 51 or fps < 49:
-            #     if DEBUG: print(f"fps={fps} is invalid, skipping...")
-            #     if DEBUG: print(f"full_length_of_song={full_length_of_song}, raw_codec.shape[1]={raw_codec.shape[1]}")
-            #     continue
-
-            if duration <= 0 or duration > full_length_of_song:
-                if DEBUG: print(f"duration={duration} is invalid, skipping...")
-                continue
-            # Check frame indices validity
-            if not (0 <= segment['codec_frame_start'] < segment['codec_frame_end'] <= raw_codec.shape[1]):
-                 if DEBUG: print(f"Invalid frame indices: start={segment['codec_frame_start']}, end={segment['codec_frame_end']}, total={raw_codec.shape[1]}. Skipping.")
-                 continue
-            # Check minimum frame length (ensure it's at least 1 frame, fps check handles very short)
-            if segment['codec_frame_end'] - segment['codec_frame_start'] <= 0: # Stricter check: must be > 0
-                 if DEBUG: print(f"Frame length is zero or negative: {segment['codec_frame_end'] - segment['codec_frame_start']}. Skipping.")
-                 continue
-            # Check if frame length is less than 1 second equivalent (fps frames)
-            if segment['codec_frame_end'] - segment['codec_frame_start'] < fps:
-                if DEBUG: print(f"frame too short: frame_end - frame_start={segment['codec_frame_end'] - segment['codec_frame_start']} (< {fps}), segment={segment}, skipping...")
-                continue
-
-            line_content = segment['line_content']
-            raw_codec_segment = raw_codec[:, segment['codec_frame_start']:segment['codec_frame_end']]
-
-            # tokenize the text
-            instruction = gen_ICL_trans_gen_instruction(data)
-            text = instruction + '\n' + line_content # Fixed newline escape
-
-            if self.args.instruction_dropout_rate > 0.0:
-                if np.random.rand() < self.args.instruction_dropout_rate:
-                    text = line_content
-
-            text_ids = Encoder.tokenizer.tokenize(text)
-
-            # read codec npy
-            try:
-                codec_ids = [Encoder.tokenizer.soa] + Encoder.codectool.sep_ids + Encoder.codectool.npy2ids(raw_codec_segment) + [Encoder.tokenizer.eoa]
-
-                if self.args.order == "textfirst":
-                    sentence_ids = text_ids + codec_ids
-                elif self.args.order == "audiofirst":
-                    sentence_ids = codec_ids + text_ids
-                else:
-                    # Fallback or error if order is not textfirst/audiofirst for this function
-                    print(f"Warning: Unexpected order '{self.args.order}' for encode_mix_text_and_codec. Defaulting to audiofirst.")
-                    sentence_ids = codec_ids + text_ids
-
-
-                doc_ids.extend(sentence_ids)
-                sentence_lens.append(len(sentence_ids))
-            except Exception as e:
-                print(f"Error processing segment in encode_mix_text_and_codec: {e}")
-                print(f"Data ID: {data.get('id', 'unknown')}, Codec Path: {data.get('codec', 'unknown')}")
-                print(f"Segment: {segment}")
-                print(f"Raw Codec Shape: {raw_codec.shape}")
-                print(f"Frame Indices: start={segment['codec_frame_start']}, end={segment['codec_frame_end']}")
-                print(f"Song Length: {full_length_of_song}, Calculated FPS: {fps}")
-                print(f"Segment Codec Shape: {raw_codec_segment.shape}")
-                print(f"Line Content: {line_content}")
-                print(f"Text Input: {text}")
-
-
-        if len(doc_ids) > 0 and self.args.append_eod:
-            doc_ids.append(Encoder.tokenizer.eod)
-            sentence_lens[-1] += 1
-
-        key = "text" # hardcode key
-        ids[key] = doc_ids
-        lens[key] = sentence_lens
-
-        # Estimate size processed, handle case where raw_codec might not exist if skipped early
-        bytes_processed = len(json_line)
-        if 'raw_codec' in locals() and isinstance(raw_codec, np.ndarray):
-             bytes_processed += get_size_in_bytes(raw_codec)
-
-        return ids, lens, bytes_processed
-
-
     def encode_codec_stage_2(self, json_line):
         """Encodes codec data for stage 2 training."""
         data = json.loads(json_line)
@@ -291,6 +189,10 @@ class Encoder(EncoderBase):
             raw_codec_vocals = np.load(data['vocals_codec'])
             raw_codec_instrumental = np.load(data['instrumental_codec'])
             raw_codec_noised_instrumental = np.load(data['noised_instrumental_codec'])
+            if DEBUG:
+                print(f"[DEBUG] Raw vocals codec: {raw_codec_vocals}")
+                print(f"[DEBUG] Raw inst codec: {raw_codec_instrumental}")
+                print(f"[DEBUG] Raw noised inst codec: {raw_codec_noised_instrumental}")
             # Load mixture codec only if needed for ICL prompt or future use
             raw_codec_mixture = None
             if self.args.use_audio_icl and self.args.audio_prompt_mode == "mixture":
@@ -407,6 +309,7 @@ class Encoder(EncoderBase):
 
                 # if retry_count == 5:
                 #     print(f"Warning: Could not find suitable audio prompt with enough variation for {data['id']} after 5 retries.")
+                if DEBUG: print(f"[DEBUG] Reference noised audio ids to be input: {list(audio_prompt_codec_array)}")
 
                 audio_prompt_codec_ids = ([Encoder.tokenizer.soa] + Encoder.codectool.sep_ids +
                                         list(audio_prompt_codec_array) +
@@ -435,14 +338,15 @@ class Encoder(EncoderBase):
             # --- End ICL Header ---
 
         elif self.args.cot:
-            # Construct standard CoT Header (no audio prompt)
-            genre_str = '[Genre] ' + data['genres']
-            complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
-            # Format: <Instruction> \n <Genre> \n <Lyrics>
-            head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
-            head_ids = Encoder.tokenizer.tokenize(head)
-            doc_ids.extend(head_ids)
-            sentence_lens.append(len(head_ids))
+            # # Construct standard CoT Header (no audio prompt)
+            # genre_str = '[Genre] ' + data['genres']
+            # complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
+            # # Format: <Instruction> \n <Genre> \n <Lyrics>
+            # head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
+            # head_ids = Encoder.tokenizer.tokenize(head)
+            # doc_ids.extend(head_ids)
+            # sentence_lens.append(len(head_ids))
+            raise ValueError("Only ICL finetune supported, no COT!")
         # Else: No CoT, no ICL - header is implicitly handled per segment (instruction prepended)
 
 
@@ -521,10 +425,11 @@ class Encoder(EncoderBase):
                                      Encoder.tokenizer.tokenize('[end_of_segment]'))
                 else:
                     # Standard non-CoT format: <text> <SOA> <sep> <interleaved_codec> <EOA>
-                    codec_tokens = ([Encoder.tokenizer.soa] + Encoder.codectool.sep_ids +
-                                    ids_segment_interleaved_list +
-                                    [Encoder.tokenizer.eoa])
-                    segment_tokens = text_ids + codec_tokens
+                    # codec_tokens = ([Encoder.tokenizer.soa] + Encoder.codectool.sep_ids +
+                    #                 ids_segment_interleaved_list +
+                    #                 [Encoder.tokenizer.eoa])
+                    # segment_tokens = text_ids + codec_tokens
+                    raise ValueError("Only CoT format supposrted for transition generaiton!")
 
                 doc_ids.extend(segment_tokens)
                 sentence_lens.append(len(segment_tokens))

@@ -224,7 +224,9 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
                 # audio_prompt_codec = audio_prompt_codec.tolist()
             elif args.use_audio_prompt:
                 audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration)
-                raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
+                # raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
+                raw_codes = np.load("/homes/al4624/Documents/YuE_finetune/test_files/codes/107749.Instrumental.noised.npy")
+                raw_codes = np.expand_dims(raw_codes, axis=0)
                 max_new_tokens = len(raw_codes[0][0])
                 print(f"[DEBUG] max_new_tokens is set to {max_new_tokens}")
                 # Format audio prompt
