@@ -47,7 +47,7 @@ def encode(audio_path, code_dir_path, codec_model, device, target_bw=0.5):
         raise
 
 
-def noise_gen_gaussian(range_factor, frame_count):
+def noise_gen_gaussian(range_factor, frame_count, device):
     mean = 0.0
     #portion of values in range = 1 - 1 / range_factor^2
     #value range is 1 here
@@ -55,19 +55,19 @@ def noise_gen_gaussian(range_factor, frame_count):
     
     # Gaussian noise: create a random normal distribution that has the same size as the data to add noise to 
     # Genearte noise with same size as that of the data.
-    return np.random.normal(mean, std, frame_count)
+    return torch.normal(mean=mean, std=std, size=(frame_count,), device=device)
 
 #signal weight controls how much of the audio signal we want to keep
 def add_noise(audio_data, noise_data, signal_weight):
     audio_data *= signal_weight
     audio_data += noise_data * (1.0 - signal_weight)
 
-def noise_file(file_path, signal_weight, sample_rate = 16000):
+def noise_file(file_path, signal_weight, device, sample_rate = 16000):
     try:
-        audio_data = load_audio_mono(file_path)[0].numpy()
+        audio_data = load_audio_mono(file_path).to(device)[0]
         frame_count = len(audio_data)
         #split to 3 segments: start, middle and end
-        segment_frame_count = int(frame_count / 3)
+        segment_frame_count = frame_count // 3
         middle_segment_start = segment_frame_count
         middle_segment_end = segment_frame_count * 2
         audio_data_middle = audio_data[middle_segment_start : middle_segment_end]
@@ -76,15 +76,15 @@ def noise_file(file_path, signal_weight, sample_rate = 16000):
         #To save computation cost, we can also generate the noise only once, and then use slices of the same noise throughout training to accomodate
         #for different durations
         #range factor of 4 covers the dynmaic range quite well without clipping too much
-        noise_data = noise_gen_gaussian(4, segment_frame_count)
+        noise_data = noise_gen_gaussian(4, segment_frame_count, device=device)
         #0.9 signal weight for now, first finetune introduces only a small amount of noise 
         add_noise(audio_data_middle, noise_data, signal_weight)
         
         #clip above and below, avoid out of range values
-        np.clip(audio_data_middle, -1.0, 1.0, out = audio_data_middle)
+        audio_data_middle.clamp_(-1.0, 1.0)
 
         print(f"File {file_path} finished noising. Middle segement starts at {middle_segment_start / sample_rate}, ends at {middle_segment_end / sample_rate} ")
-        return torch.from_numpy(audio_data).unsqueeze(0).to(dtype=torch.float32)
+        return audio_data.unsqueeze(0).to(dtype=torch.float32)
     #FMA dataset has corrupted files. It is normal for a few files to fail the processing.
     except Exception as e:
         print(f"Error processing {file_path}: {e}. Skipping")
@@ -96,7 +96,7 @@ def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device, 
         if (not os.path.exists(audio_path)):
             print(f"File {audio_path} does not exist. Skipping")
             return
-        audio_data = noise_file(audio_path, signal_weight)
+        audio_data = noise_file(audio_path, signal_weight, device)
         raw_codes = encode_audio(codec_model, audio_data, device, target_bw)
         code_file_name = os.path.splitext(os.path.basename(audio_path))[0] + ".noised.npy"
         print(f"Finished noising and encoding file {audio_path}")
@@ -126,31 +126,22 @@ codec_model.to(device)
 codec_model.eval()
 
 #encode
-sep_track_dir_path = "/homes/al4624/Documents/YuE_finetune/test_files/sep"
-sep_code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_files/codes"
-# sep_track_dir_path = "/homes/al4624/Documents/YuE_finetune/test_sep_original"
-# sep_code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_codes"
+sep_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
+sep_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
 sep_track_paths = [str(file) for file in Path(sep_track_dir_path).glob('*.mp3') if file.is_file()]
 num_sep_track = len(sep_track_paths)
 
-# mixture_track_dir_paths = ["/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.3", 
-#                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.5",
-#                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.7",
-#                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
+mixture_track_dir_paths = [ "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.1",
+                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.3",
+                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.5",
+                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.7",
+                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
 
-mixture_track_dir_paths = ["/homes/al4624/Documents/YuE_finetune/test_files/mixture"] #modify to specify the tracks to encode
 
-# signal_weights = [0.7, 0.5, 0.3, 0.0]
+signal_weights = [0.9, 0.7, 0.5, 0.3, 0.0] #modify to specify the noise levels. Must contain equal number of elements as mixture_track_dir_paths
 
-signal_weights = [0.9] #modify to specify the noise levels. Must contain equal number of elements as mixture_track_dir_paths
-
-# inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep" #modify to specify the directory for the instrumental audio tracks
-inst_track_dir_path = "/homes/al4624/Documents/YuE_finetune/test_files/sep"
-# inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes" #modify to specify the directory for outputting the noised instrumental codes
-inst_code_dir_path = "/homes/al4624/Documents/YuE_finetune/test_files/codes"
-
-# inst_track_paths = [str(file) for file in Path(inst_track_dir_path).glob('*.Instrumental.mp3') if file.is_file()]
-# num_inst_track = len(inst_track_paths)
+inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep" #modify to specify the directory for the instrumental audio tracks
+inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes" #modify to specify the directory for outputting the noised instrumental codes
 
 
 if __name__ == "__main__":

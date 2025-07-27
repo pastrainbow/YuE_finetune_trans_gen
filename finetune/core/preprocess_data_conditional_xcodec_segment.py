@@ -31,7 +31,7 @@ from core.datasets import indexed_dataset
 from preprocess_data_conditional_xcodec import get_file_name, check_files_exist
 from preprocess_data_conditional_xcodec import Encoder as EncoderBase
 
-DEBUG = False
+DEBUG = True
 np.random.seed(42)
 
 
@@ -297,19 +297,7 @@ class Encoder(EncoderBase):
 
                 audio_prompt_codec_array = options_codecs[selected_option]
 
-                # Optional: Filter prompts with low variation
-                # retry_count=0
-                # min_unique_ratio = 0.1
-                # while (len(np.unique(audio_prompt_codec_array)) < len(audio_prompt_codec_array) * min_unique_ratio) and retry_count < 5:
-                #     if DEBUG: print(f"Retrying prompt sampling due to low variation ({len(np.unique(audio_prompt_codec_array))} unique) for {data['id']}")
-                #     prompt_start_token_idx = random.randint(0, max_start_token_index)
-                #     prompt_end_token_idx = prompt_start_token_idx + audio_prompt_length_in_codec_tokens
-                #     audio_prompt_codec_array = options_codecs[selected_option][prompt_start_token_idx:prompt_end_token_idx]
-                #     retry_count += 1
-
-                # if retry_count == 5:
-                #     print(f"Warning: Could not find suitable audio prompt with enough variation for {data['id']} after 5 retries.")
-                if DEBUG: print(f"[DEBUG] Reference noised audio ids to be input: {list(audio_prompt_codec_array)}")
+                if DEBUG: print(f"[DEBUG] Length of reference noised audio ids to be input: {len(list(audio_prompt_codec_array))}")
 
                 audio_prompt_codec_ids = ([Encoder.tokenizer.soa] + Encoder.codectool.sep_ids +
                                         list(audio_prompt_codec_array) +
@@ -329,6 +317,7 @@ class Encoder(EncoderBase):
             complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
             # Format: <Instruction> \n <Genre> \n <Lyrics> [start_of_reference] <Prompt> [end_of_reference]
             head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
+            if DEBUG: print(f"[DEBUG]: header text content: {head}")
             head_ids = (Encoder.tokenizer.tokenize(head) +
                         Encoder.tokenizer.tokenize("[start_of_reference]") +
                         audio_prompt_codec_ids +
@@ -412,6 +401,8 @@ class Encoder(EncoderBase):
 
                 ids_segment_interleaved = rearrange([np.array(vocals_ids_seg), np.array(instrumental_ids_seg)], 'b n -> (n b)')
                 ids_segment_interleaved_list = list(ids_segment_interleaved)
+
+                if DEBUG: print(f"Length of the audio codes for segment {line_content}: {len(ids_segment_interleaved_list)}")
 
                 # --- Construct Segment Tokens ---
                 segment_tokens = []
