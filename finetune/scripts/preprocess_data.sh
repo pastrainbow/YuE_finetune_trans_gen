@@ -1,5 +1,7 @@
 #!/bin/bash
 
+rm -rf ../example/mmap/
+
 DATA_SETTING=$1
 MODE_TYPE=$2
 TOKENIZER_MODEL=/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/inference/mm_tokenizer_v0.2_hf/tokenizer.model

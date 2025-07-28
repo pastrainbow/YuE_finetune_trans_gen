@@ -281,7 +281,6 @@ class Encoder(EncoderBase):
                 instrumental_ids_prompt = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt)
 
                 options_codecs = {}
-                # codec_step = 1 # How many codec tokens per original frame
                 selected_option = self.args.audio_prompt_mode
 
                 if selected_option == "dual":
