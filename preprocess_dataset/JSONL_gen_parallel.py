@@ -80,7 +80,7 @@ def process_track(track_info):
     segment_duration = round(track_duration / 3, 2)
     segment_codes_duration = int(segment_duration * codec_fps)
 
-    json_obj["codec"] = "" # Unused
+    json_obj["codec"] = mixture_audio_path
     json_obj["vocals_codec"] = vocals_codes_path
     json_obj["instrumental_codec"] = instrumental_codes_path
     json_obj["noised_instrumental_codec"] = noised_inst_codes_path

@@ -16,7 +16,7 @@ python infer.py \
     --end_audio_prompt_path /homes/al4624/Documents/YuE_finetune/inference_audio_prompts/end.mp3 \
     --genre_txt ../prompt_egs/genre.txt \
     --lyrics_txt ../prompt_egs/lyrics.txt \
-    --run_n_segments 2 \
+    --run_n_segments 3 \
     --stage2_batch_size 4 \
     --output_dir ../output \
     --repetition_penalty 1.1

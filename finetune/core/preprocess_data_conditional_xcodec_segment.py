@@ -746,9 +746,9 @@ def get_args():
     group.add_argument('--audio-prompt-mode', type=str, default="dual",
                        choices=['mixture', 'dual', 'inst', 'vocal'],
                        help='Source for the audio prompt in ICL mode.')
-    group.add_argument('--audio-prompt-len', type=int, default=30, help='Length of audio prompt (now sampled) around 30s.')
-    group.add_argument('--min-icl-song-duration-sec', type=float, default=40.0,
-                        help='Minimum song duration in seconds required to attempt ICL processing.')
+    # group.add_argument('--audio-prompt-len', type=int, default=30, help='Length of audio prompt (now sampled) around 30s.')
+    # group.add_argument('--min-icl-song-duration-sec', type=float, default=40.0,
+    #                     help='Minimum song duration in seconds required to attempt ICL processing.')
 
 
     group = parser.add_argument_group(title='stage 2 specific')
