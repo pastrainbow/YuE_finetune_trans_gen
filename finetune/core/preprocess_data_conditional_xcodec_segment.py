@@ -70,6 +70,7 @@ class Encoder(EncoderBase):
         lens = {}
 
         raw_codec = np.load(data[Encoder.codectool.data_feature]).astype(np.int32)
+        if DEBUG: print(f"[DEBUG] raw mixture codec: {raw_codec}")
         raw_codec = torch.as_tensor(raw_codec, dtype=torch.int32)
         # fps*duration: 50fps*6s = 300
         fps = Encoder.codectool.fps
@@ -746,9 +747,6 @@ def get_args():
     group.add_argument('--audio-prompt-mode', type=str, default="dual",
                        choices=['mixture', 'dual', 'inst', 'vocal'],
                        help='Source for the audio prompt in ICL mode.')
-    # group.add_argument('--audio-prompt-len', type=int, default=30, help='Length of audio prompt (now sampled) around 30s.')
-    # group.add_argument('--min-icl-song-duration-sec', type=float, default=40.0,
-    #                     help='Minimum song duration in seconds required to attempt ICL processing.')
 
 
     group = parser.add_argument_group(title='stage 2 specific')

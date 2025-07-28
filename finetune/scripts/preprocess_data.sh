@@ -111,6 +111,7 @@ elif [ "$MODE_TYPE" == "icl_cot" ]; then
                   --use-token-level-interleave \
                   --use-audio-icl \
                   --audio-prompt-mode $mode \
+                  --teacher-forcing \
                   --keep-sequential-samples
                   "
 

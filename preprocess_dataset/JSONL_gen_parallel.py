@@ -28,7 +28,8 @@ audio_dir_path = args.audio_dir_path
 # noised_inst_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
 # output_jsonl_path = "/vol/bitbucket/al4624/finetune_dataset/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
 
-codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/sep_codes"
+mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_mixture_codes"
+sep_codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/sep_codes"
 noised_inst_codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes"
 output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
 
@@ -53,8 +54,9 @@ def process_track(track_info):
     json_obj["id"] = str(current_id + 1)
 
     mixture_audio_path = os.path.join(audio_dir_path, track_name + ".mp3")
-    vocals_codes_path = os.path.join(codes_dir_path, track_name + ".Vocals.npy")
-    instrumental_codes_path = os.path.join(codes_dir_path, track_name + ".Instrumental.npy")
+    mixture_codes_path = os.path.join(mixture_code_dir_path, track_name + ".npy")
+    vocals_codes_path = os.path.join(sep_codes_dir_path, track_name + ".Vocals.npy")
+    instrumental_codes_path = os.path.join(sep_codes_dir_path, track_name + ".Instrumental.npy")
     noised_inst_codes_path = os.path.join(noised_inst_codes_dir_path, track_name + ".Instrumental.noised.npy")
 
     for path, desc in [
@@ -62,6 +64,7 @@ def process_track(track_info):
         (instrumental_codes_path, "instrumental codec"),
         (noised_inst_codes_path, "noised instrumental codec"),
         (mixture_audio_path, "mixture audio")
+        (mixture_codes_path, "mixture codec")
     ]:
         if not os.path.exists(path):
             print(f"Missing {desc} file for track {track_name}!")
@@ -80,7 +83,7 @@ def process_track(track_info):
     segment_duration = round(track_duration / 3, 2)
     segment_codes_duration = int(segment_duration * codec_fps)
 
-    json_obj["codec"] = mixture_audio_path
+    json_obj["codec"] = mixture_codes_path
     json_obj["vocals_codec"] = vocals_codes_path
     json_obj["instrumental_codec"] = instrumental_codes_path
     json_obj["noised_instrumental_codec"] = noised_inst_codes_path

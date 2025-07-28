@@ -159,21 +159,49 @@ def gen_ICL_trans_gen_instruction(start_audio_path, gen_duration, token_fps=50):
 
     return instruction
 
-def noise_gen_gaussian(range_factor, frame_count):
+# def noise_gen_gaussian(range_factor, frame_count, device):
+#     mean = 0.0
+#     #portion of values in range = 1 - 1 / range_factor^2
+#     #value range is 1 here
+#     std = 1.0 / range_factor
+    
+#     # Gaussian noise: create a random normal distribution that has the same size as the data to add noise to 
+#     # Genearte noise with same size as that of the data.
+#     return torch.normal(mean=mean, std=std, size=(frame_count,), device=device)
+
+# def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
+#     range_factor = 4  # for gaussian noise generation
+#     start_audio_data = load_audio_mono(start_audio_path)[0]  # shape: [T]
+#     end_audio_data = load_audio_mono(end_audio_path)[0]      # shape: [T]
+#     noise_np = noise_gen_gaussian(range_factor, int(noise_duration * sample_rate))
+#     noise_data = torch.from_numpy(noise_np.astype(np.float32))  # convert to tensor
+#     concat_data = torch.cat((start_audio_data, noise_data, end_audio_data), dim=0)
+#     return concat_data.unsqueeze(0)  # shape: [1, T]
+
+
+def noise_gen_gaussian(range_factor, frame_count, device):
     mean = 0.0
     #portion of values in range = 1 - 1 / range_factor^2
     #value range is 1 here
     std = 1.0 / range_factor
     
     # Gaussian noise: create a random normal distribution that has the same size as the data to add noise to 
-    return np.random.normal(mean, std, frame_count)
+    # Genearte noise with same size as that of the data.
+    return torch.normal(mean=mean, std=std, size=(frame_count,), device=device)
 
-def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
+
+def prompts_concat(start_audio_path, end_audio_path, noise_duration, device, sample_rate=16000):
     range_factor = 4  # for gaussian noise generation
-    start_audio_data = load_audio_mono(start_audio_path)[0]  # shape: [T]
-    end_audio_data = load_audio_mono(end_audio_path)[0]      # shape: [T]
-    noise_np = noise_gen_gaussian(range_factor, int(noise_duration * sample_rate))
-    noise_data = torch.from_numpy(noise_np.astype(np.float32))  # convert to tensor
+
+    start_audio_data = load_audio_mono(start_audio_path)[0].to(device)  # shape: [T]
+    end_audio_data = load_audio_mono(end_audio_path)[0].to(device)      # shape: [T]
+
+    noise_data = noise_gen_gaussian(
+        range_factor,
+        int(noise_duration * sample_rate),
+        device,
+    )
+
     concat_data = torch.cat((start_audio_data, noise_data, end_audio_data), dim=0)
     return concat_data.unsqueeze(0)  # shape: [1, T]
 
@@ -223,7 +251,7 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
                 # audio_prompt_codec = ids_segment_interleaved[int(args.prompt_start_time*50*2): int(args.prompt_end_time*50*2)]
                 # audio_prompt_codec = audio_prompt_codec.tolist()
             elif args.use_audio_prompt:
-                audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration)
+                audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration, device)
                 raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
                 # np.save("/homes/al4624/Documents/YuE_finetune/test_files/prompt_concat_codes.npy", raw_codes_real)
                 # print(f"[DEBUG] real raw codes: {raw_codes_real}, with shape {raw_codes_real.shape}")
