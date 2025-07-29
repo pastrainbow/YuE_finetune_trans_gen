@@ -31,7 +31,7 @@ from core.datasets import indexed_dataset
 from preprocess_data_conditional_xcodec import get_file_name, check_files_exist
 from preprocess_data_conditional_xcodec import Encoder as EncoderBase
 
-DEBUG = True
+DEBUG = False
 np.random.seed(42)
 
 

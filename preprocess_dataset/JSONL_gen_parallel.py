@@ -24,13 +24,15 @@ args = parser.parse_args()
 audio_dir_path = args.audio_dir_path
 
 
-# codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
-# noised_inst_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
-# output_jsonl_path = "/vol/bitbucket/al4624/finetune_dataset/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
+# mixture_code_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/mixture_codes"
+# sep_codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/sep_codes"
+# noised_inst_codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes"
+# output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
+
 
 mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_mixture_codes"
-sep_codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/sep_codes"
-noised_inst_codes_dir_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes"
+sep_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
+noised_inst_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
 output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
 
 start_lyrics = "[beginning]\n\n"
@@ -63,8 +65,8 @@ def process_track(track_info):
         (vocals_codes_path, "vocal codec"),
         (instrumental_codes_path, "instrumental codec"),
         (noised_inst_codes_path, "noised instrumental codec"),
-        (mixture_audio_path, "mixture audio")
-        (mixture_codes_path, "mixture codec")
+        (mixture_audio_path, "mixture audio"),
+        (mixture_codes_path, "mixture codec"),
     ]:
         if not os.path.exists(path):
             print(f"Missing {desc} file for track {track_name}!")

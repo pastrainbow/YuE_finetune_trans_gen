@@ -8,6 +8,8 @@
 #SBATCH --mail-user=al4624
 #SBATCH --output=run_YuE_finetune%j.out
 
+rm -rf /vol/bitbucket/al4624/model_output/*
+
 # Help information
 print_help() {
   echo "========================================================"
@@ -112,12 +114,12 @@ PER_DEVICE_TRAIN_BATCH_SIZE=1
 PER_DEVICE_EVAL_BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
-SEQ_LENGTH=4096
-TRAIN_ITERS=1271
+SEQ_LENGTH=8192
+TRAIN_ITERS=9777
 NUM_TRAIN_EPOCHS=5
 
 # Data paths (replace with your actual paths)
-DATA_PATH="83360769 /vol/bitbucket/al4624/finetune_dataset/example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
+DATA_PATH="640775634 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
 DATA_CACHE_PATH="/vol/bitbucket/al4624/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split
