@@ -31,7 +31,7 @@ from core.datasets import indexed_dataset
 from preprocess_data_conditional_xcodec import get_file_name, check_files_exist
 from preprocess_data_conditional_xcodec import Encoder as EncoderBase
 
-DEBUG = True
+DEBUG = False
 np.random.seed(42)
 
 
@@ -48,17 +48,6 @@ def get_size_in_bytes(arr):
     """Returns the size of a numpy array in bytes."""
     return arr.nbytes
 
-# def inverse_transform_sampling(cdf, x_values, num_samples=1):
-#     """
-#     Performs inverse transform sampling given a CDF.
-#     Used for sampling audio prompt lengths in ICL mode.
-#     """
-#     # Generate uniformly distributed random numbers
-#     r = np.random.rand(num_samples)
-#     # Find corresponding x values using interpolation on the CDF
-#     random_samples = np.interp(r, cdf, x_values)
-#     return random_samples
-
 class Encoder(EncoderBase):
     """
     Encodes JSON lines into token IDs for different preprocessing modes.
@@ -71,108 +60,6 @@ class Encoder(EncoderBase):
         super().__init__(args)
         self.args = args
 
-    def encode_mix_text_and_codec(self, json_line):
-        """Encodes text and codec data, simple concatenation based on order."""
-        if DEBUG: print("[FINETUNE] Function encode_mix_text_and_codec called.")
-        data = json.loads(json_line)
-        assert 'text' in data and 'codec' in data, "`text` and `codec` must be in the json key"
-
-        ids = {}
-        lens = {}
-
-        segmented_lyrics = data['splitted_lyrics']['segmented_lyrics']
-        raw_codec = np.load(data['codec'])
-
-        full_length_of_song = data['audio_length_in_sec']
-        # Handle potential division by zero or invalid full_length_of_song
-        if full_length_of_song <= 0:
-             print(f"Warning: Invalid audio_length_in_sec={full_length_of_song} in {data.get('id', 'unknown')}. Skipping.")
-             return {}, {}, 0 # Return empty results and 0 bytes processed
-        fps = raw_codec.shape[1] / full_length_of_song
-
-        doc_ids = []
-        sentence_lens = [] # here sentence means segment
-        for segment in segmented_lyrics:
-            duration = segment['duration']
-            # Relaxed fps check allowing exactly 50.0
-            # if fps > 51 or fps < 49:
-            #     if DEBUG: print(f"fps={fps} is invalid, skipping...")
-            #     if DEBUG: print(f"full_length_of_song={full_length_of_song}, raw_codec.shape[1]={raw_codec.shape[1]}")
-            #     continue
-
-            if duration <= 0 or duration > full_length_of_song:
-                if DEBUG: print(f"duration={duration} is invalid, skipping...")
-                continue
-            # Check frame indices validity
-            if not (0 <= segment['codec_frame_start'] < segment['codec_frame_end'] <= raw_codec.shape[1]):
-                 if DEBUG: print(f"Invalid frame indices: start={segment['codec_frame_start']}, end={segment['codec_frame_end']}, total={raw_codec.shape[1]}. Skipping.")
-                 continue
-            # Check minimum frame length (ensure it's at least 1 frame, fps check handles very short)
-            if segment['codec_frame_end'] - segment['codec_frame_start'] <= 0: # Stricter check: must be > 0
-                 if DEBUG: print(f"Frame length is zero or negative: {segment['codec_frame_end'] - segment['codec_frame_start']}. Skipping.")
-                 continue
-            # Check if frame length is less than 1 second equivalent (fps frames)
-            if segment['codec_frame_end'] - segment['codec_frame_start'] < fps:
-                if DEBUG: print(f"frame too short: frame_end - frame_start={segment['codec_frame_end'] - segment['codec_frame_start']} (< {fps}), segment={segment}, skipping...")
-                continue
-
-            line_content = segment['line_content']
-            raw_codec_segment = raw_codec[:, segment['codec_frame_start']:segment['codec_frame_end']]
-
-            # tokenize the text
-            instruction = gen_ICL_trans_gen_instruction()
-            text = instruction + '\n' + line_content # Fixed newline escape
-
-            if self.args.instruction_dropout_rate > 0.0:
-                if np.random.rand() < self.args.instruction_dropout_rate:
-                    text = line_content
-
-            text_ids = Encoder.tokenizer.tokenize(text)
-
-            # read codec npy
-            try:
-                codec_ids = [Encoder.tokenizer.soa] + Encoder.codectool.sep_ids + Encoder.codectool.npy2ids(raw_codec_segment) + [Encoder.tokenizer.eoa]
-
-                if self.args.order == "textfirst":
-                    sentence_ids = text_ids + codec_ids
-                elif self.args.order == "audiofirst":
-                    sentence_ids = codec_ids + text_ids
-                else:
-                    # Fallback or error if order is not textfirst/audiofirst for this function
-                    print(f"Warning: Unexpected order '{self.args.order}' for encode_mix_text_and_codec. Defaulting to audiofirst.")
-                    sentence_ids = codec_ids + text_ids
-
-
-                doc_ids.extend(sentence_ids)
-                sentence_lens.append(len(sentence_ids))
-            except Exception as e:
-                print(f"Error processing segment in encode_mix_text_and_codec: {e}")
-                print(f"Data ID: {data.get('id', 'unknown')}, Codec Path: {data.get('codec', 'unknown')}")
-                print(f"Segment: {segment}")
-                print(f"Raw Codec Shape: {raw_codec.shape}")
-                print(f"Frame Indices: start={segment['codec_frame_start']}, end={segment['codec_frame_end']}")
-                print(f"Song Length: {full_length_of_song}, Calculated FPS: {fps}")
-                print(f"Segment Codec Shape: {raw_codec_segment.shape}")
-                print(f"Line Content: {line_content}")
-                print(f"Text Input: {text}")
-
-
-        if len(doc_ids) > 0 and self.args.append_eod:
-            doc_ids.append(Encoder.tokenizer.eod)
-            sentence_lens[-1] += 1
-
-        key = "text" # hardcode key
-        ids[key] = doc_ids
-        lens[key] = sentence_lens
-
-        # Estimate size processed, handle case where raw_codec might not exist if skipped early
-        bytes_processed = len(json_line)
-        if 'raw_codec' in locals() and isinstance(raw_codec, np.ndarray):
-             bytes_processed += get_size_in_bytes(raw_codec)
-
-        return ids, lens, bytes_processed
-
-
     def encode_codec_stage_2(self, json_line):
         """Encodes codec data for stage 2 training."""
         data = json.loads(json_line)
@@ -181,6 +68,7 @@ class Encoder(EncoderBase):
         lens = {}
 
         raw_codec = np.load(data[Encoder.codectool.data_feature]).astype(np.int32)
+        if DEBUG: print(f"[DEBUG] raw mixture codec: {raw_codec}")
         raw_codec = torch.as_tensor(raw_codec, dtype=torch.int32)
         # fps*duration: 50fps*6s = 300
         fps = Encoder.codectool.fps
@@ -300,6 +188,10 @@ class Encoder(EncoderBase):
             raw_codec_vocals = np.load(data['vocals_codec'])
             raw_codec_instrumental = np.load(data['instrumental_codec'])
             raw_codec_noised_instrumental = np.load(data['noised_instrumental_codec'])
+            if DEBUG:
+                print(f"[DEBUG] Raw vocals codec: {raw_codec_vocals}")
+                print(f"[DEBUG] Raw inst codec: {raw_codec_instrumental}")
+                print(f"[DEBUG] Raw noised inst codec: {raw_codec_noised_instrumental}")
             # Load mixture codec only if needed for ICL prompt or future use
             raw_codec_mixture = None
             if self.args.use_audio_icl and self.args.audio_prompt_mode == "mixture":
@@ -384,55 +276,19 @@ class Encoder(EncoderBase):
             # --- Start ICL Prompt Generation ---
             audio_prompt_codec_ids = []
             try:
-                # # Use the full range covered by lyrics segments for prompt sampling
-                # prompt_range_start_frame = segmented_lyrics[0].get('codec_frame_start', 0)
-                # prompt_range_end_frame = segmented_lyrics[-1].get('codec_frame_end', raw_codec_vocals.shape[1])
-
-                # # Ensure range is valid
-                # if prompt_range_start_frame >= prompt_range_end_frame:
-                #     raise ValueError(f"Invalid prompt range: start={prompt_range_start_frame}, end={prompt_range_end_frame}")
-
-                # Extract relevant segment parts for prompt generation
-                # raw_codec_vocals_prompt = raw_codec_vocals
                 raw_codec_instrumental_prompt = raw_codec_noised_instrumental
-                # raw_codec_mixture_prompt = None
-                # if raw_codec_mixture is not None:
-                #     raw_codec_mixture_prompt = raw_codec_mixture
-
-                # vocals_ids_prompt = Encoder.codectool.npy2ids(raw_codec_vocals_prompt)
-                # instrumental_ids_prompt = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt)
-
-                # Check if ids are valid lists/arrays
-                # if not isinstance(vocals_ids_prompt, (list, np.ndarray)) or not isinstance(instrumental_ids_prompt, (list, np.ndarray)):
-                #     raise TypeError("npy2ids did not return list/ndarray for prompt segment")
-                # if len(vocals_ids_prompt) == 0:
-                #     raise ValueError("Empty codec IDs generated for prompt segment")
-
-                # options_codecs = {}
-                # codec_step = 1 # How many codec tokens per original frame
                 selected_option = self.args.audio_prompt_mode
 
                 if selected_option == "dual":
                     raise ValueError(f"Only supports instrumental mode")
-                    # codec_step = 2
-                    # if len(vocals_ids_prompt) != len(instrumental_ids_prompt):
-                    #     raise ValueError(f"Length mismatch for interleaving prompt: {len(vocals_ids_prompt)} vs {len(instrumental_ids_prompt)}")
-                    # ids_segment_interleaved = rearrange([np.array(vocals_ids_prompt), np.array(instrumental_ids_prompt)], 'b n -> (n b)')
-                    # options_codecs['dual'] = ids_segment_interleaved
                 elif selected_option == "mixture":
                     raise ValueError(f"Only supports instrumental mode")
-                    # if raw_codec_mixture_prompt is None: # Ensure mixture was loaded
-                    #      raise ValueError("Mixture codec selected for prompt but not loaded/available.")
-                    # mixture_ids_prompt = Encoder.codectool.npy2ids(raw_codec_mixture_prompt)
-                    # if not isinstance(mixture_ids_prompt, (list, np.ndarray)): raise TypeError("npy2ids failed for mixture prompt")
-                    # options_codecs['mixture'] = np.array(mixture_ids_prompt)
                 elif selected_option == "inst":
-                    #do nothing - we only support instrumental prompting for now anyway
+                    #do nothing - we only support instrumental prompting for now anyway,
+                    #and we need to segment the noised instrumental prompt
                     pass
-                    # options_codecs['inst'] = np.array(instrumental_ids_prompt)
                 elif selected_option == "vocal":
                     raise ValueError(f"Only supports instrumental mode")
-                    # options_codecs['vocal'] = np.array(vocals_ids_prompt)
                 else:
                     raise ValueError(f"Invalid audio_prompt_mode: {selected_option}")
 
@@ -444,6 +300,8 @@ class Encoder(EncoderBase):
                     frame_start = segment.get('codec_frame_start')
                     frame_end = segment.get('codec_frame_end')
                     line_content = segment.get('line_content')
+
+                    if DEBUG: print(f"[DEBUG] Processing prompt segment with line content: {line_content}")
 
                     # Basic validation of segment data
                     if duration is None or frame_start is None or frame_end is None or line_content is None:
@@ -469,6 +327,7 @@ class Encoder(EncoderBase):
                         # Apply instruction dropout if enabled and not CoT/ICL
                         if self.args.instruction_dropout_rate > 0.0 and np.random.rand() < self.args.instruction_dropout_rate:
                             text += line_content
+                    if DEBUG: print(f"[DEBUG] Text prompt for segment: {text}")
                     text_ids = Encoder.tokenizer.tokenize(text)
 
 
@@ -476,11 +335,13 @@ class Encoder(EncoderBase):
                     try:
                         instrumental_prompt_ids_seg = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt_segment)
 
-                        if  not isinstance(instrumental_prompt_ids_seg, (list, np.ndarray)):
+                        if not isinstance(instrumental_prompt_ids_seg, (list, np.ndarray)):
                             raise TypeError("npy2ids did not return a list or ndarray for segment")
 
                         prompt_ids_segment = np.array(instrumental_prompt_ids_seg)
                         prompt_ids_segment_list = list(prompt_ids_segment)
+
+                        if DEBUG: print(f"[DEBUG] Prompt ids for segment has length: {len(prompt_ids_segment_list)}")
 
                         # --- Construct Segment Tokens ---
                         segment_tokens = []
@@ -493,11 +354,7 @@ class Encoder(EncoderBase):
                                             [Encoder.tokenizer.eoa] +
                                             Encoder.tokenizer.tokenize('[end_of_segment]'))
                         else:
-                            #Standard non-CoT format: <text> <SOA> <sep> <interleaved_codec> <EOA>
-                            codec_tokens = ([Encoder.tokenizer.soa] + Encoder.codectool.sep_ids +
-                                            prompt_ids_segment_list +
-                                            [Encoder.tokenizer.eoa])
-                            segment_tokens = text_ids + codec_tokens
+                            raise ValueError("Transition generation only supports ICL!")
 
                         prompt_codec_ids.extend(segment_tokens)
 
@@ -511,6 +368,8 @@ class Encoder(EncoderBase):
 
                 audio_prompt_codec_ids = prompt_codec_ids
 
+                if DEBUG: print(f"[DEBUG] Complete segmented prompt ids have length {len(audio_prompt_codec_ids)}")
+
             except Exception as e:
                 print(f"Error generating ICL audio prompt for {data['id']}: {e}")
                 print("Skipping sample due to ICL prompt error.")
@@ -522,10 +381,13 @@ class Encoder(EncoderBase):
 
             # Construct ICL-CoT Header
             genre_str = '[Genre] ' + data['genres'] + ' clean'
+            if DEBUG: print(f"[DEBUG] genre string: {genre_str}")
             reference_genre_str = '[Genre] ' + data['genres'] + ' noisy\n'
+            if DEBUG: print(f"[DEBUG] prompt genre string: {reference_genre_str}")
             complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
             # Format: <Instruction> \n <Genre> \n <Lyrics> [start_of_reference] <Genre> <segments> [end_of_reference]
             head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
+            if DEBUG: print(f"[DEBUG] complete header text: {head}")
             head_ids = (Encoder.tokenizer.tokenize(head) +
                         Encoder.tokenizer.tokenize("[start_of_reference]") +
                         Encoder.tokenizer.tokenize(reference_genre_str) + 
@@ -535,16 +397,17 @@ class Encoder(EncoderBase):
             sentence_lens.append(len(head_ids))
             # --- End ICL Header ---
         #only support ICL
-        # elif self.args.cot:
-        #     # Construct standard CoT Header (no audio prompt)
-        #     genre_str = '[Genre] ' + data['genres']
-        #     complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
-        #     # Format: <Instruction> \n <Genre> \n <Lyrics>
-        #     head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
-        #     head_ids = Encoder.tokenizer.tokenize(head)
-        #     doc_ids.extend(head_ids)
-        #     sentence_lens.append(len(head_ids))
-        # Else: No CoT, no ICL - header is implicitly handled per segment (instruction prepended)
+        elif self.args.cot:
+            # # Construct standard CoT Header (no audio prompt)
+            # genre_str = '[Genre] ' + data['genres']
+            # complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
+            # # Format: <Instruction> \n <Genre> \n <Lyrics>
+            # head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
+            # head_ids = Encoder.tokenizer.tokenize(head)
+            # doc_ids.extend(head_ids)
+            # sentence_lens.append(len(head_ids))
+            raise ValueError("Only ICL finetune supported, no COT!")
+        #Else: No CoT, no ICL - header is implicitly handled per segment (instruction prepended)
 
 
         # --- Process Individual Segments ---

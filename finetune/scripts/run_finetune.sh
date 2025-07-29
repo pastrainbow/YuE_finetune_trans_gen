@@ -6,7 +6,7 @@
 #email results, store console logs in a .out file
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=al4624
-#SBATCH --output=run_YuE_finetune%j.out
+#SBATCH --output=run_YuE_finetune_seg_prompt%j.out
 
 # Help information
 print_help() {
@@ -103,7 +103,7 @@ fi
 
 # Hardware configuration
 NUM_GPUS=1
-MASTER_PORT=9999
+MASTER_PORT=29500
 # Uncomment and modify if you need specific GPUs
 # export CUDA_VISIBLE_DEVICES=4,5,6,7
 
@@ -113,21 +113,21 @@ PER_DEVICE_EVAL_BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
 SEQ_LENGTH=8192
-TRAIN_ITERS=1271
-NUM_TRAIN_EPOCHS=10
+TRAIN_ITERS=9789
+NUM_TRAIN_EPOCHS=5
 
 # Data paths (replace with your actual paths)
-DATA_PATH="83360769 /vol/bitbucket/al4624/finetune_dataset/example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"     
-DATA_CACHE_PATH="/vol/bitbucket/al4624/data_cache"
+DATA_PATH="641566772 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"     
+DATA_CACHE_PATH="/vol/bitbucket/al4624/segmented_prompt_finetune_cache/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split
 DATA_SPLIT="900,50,50"
 
 # Model configuration
 TOKENIZER_MODEL_PATH="../inference/mm_tokenizer_v0.2_hf/tokenizer.model"
-MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-cot"
-MODEL_CACHE_DIR="/vol/bitbucket/al4624/model_cache"
-OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
+MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-icl"
+MODEL_CACHE_DIR="/vol/bitbucket/al4624/segmented_prompt_finetune_cache/model_cache"
+OUTPUT_DIR="/vol/bitbucket/al4624/segmented_prompt_model_output"
 DEEPSPEED_CONFIG=config/ds_config_zero2.json
 
 # LoRA configuration

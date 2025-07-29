@@ -1,5 +1,7 @@
 #!/bin/bash
 
+rm -rf ../example/mmap/
+
 DATA_SETTING=$1
 MODE_TYPE=$2
 TOKENIZER_MODEL=/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/inference/mm_tokenizer_v0.2_hf/tokenizer.model
@@ -27,11 +29,9 @@ if [ "$DATA_SETTING" == "dummy" ]; then
        QUANTIZER_BEGIN_IDX=0
        NUM_QUANTIZERS=1
 elif [ "$DATA_SETTING" == "trans_gen" ]; then
-    #    DATA_ROOT=/vol/bitbucket/al4624/finetune_dataset/example
-       DATA_ROOT=example #testing
+       DATA_ROOT=example
        NAME_PREFIX=trans_gen.msa.xcodec_16k
        CODEC_TYPE=xcodec
-       INSTRUCTION="" #Unused
        ORDER=textfirst
        DROPOUT=0.0
        KEEP_SEQUENTIAL_SAMPLES=true
@@ -84,7 +84,6 @@ elif [ "$MODE_TYPE" == "icl_cot" ]; then
     echo "Running in 'icl_cot' mode..."
     NAME_SUFFIX=stage_1_token_level_interleave_long_prompt_msa
     MMAP_NAME=mmap/${NAME_PREFIX}_${NAME_SUFFIX}_$ORDER # Define MMAP_NAME base for this mode
-    PROMPT_LEN=30
 
     rm -f $DATA_ROOT/jsonl/${NAME_PREFIX}_*.jsonl # Use -f
     mkdir -p $DATA_ROOT/$MMAP_NAME # Ensure base MMAP dir exists
@@ -103,7 +102,6 @@ elif [ "$MODE_TYPE" == "icl_cot" ]; then
                   --codec-type $CODEC_TYPE \
                   --workers 8 \
                   --partitions 1 \
-                  --instruction \"$INSTRUCTION\" \
                   --instruction-dropout-rate $DROPOUT \
                   --order $ORDER \
                   --append-eod \
@@ -113,7 +111,7 @@ elif [ "$MODE_TYPE" == "icl_cot" ]; then
                   --use-token-level-interleave \
                   --use-audio-icl \
                   --audio-prompt-mode $mode \
-                  --audio-prompt-len $PROMPT_LEN \
+                  --teacher-forcing \
                   --keep-sequential-samples
                   "
 

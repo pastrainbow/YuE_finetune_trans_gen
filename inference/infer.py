@@ -1,8 +1,8 @@
 import os
 #prevent model from using lab machine cache
-os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/transformer_cache'
-os.environ['HF_HOME'] = '/vol/bitbucket/al4624/hf_home_cache'
-os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/xdg_cache_home'
+os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/inference_cache/transformer_cache'
+os.environ['HF_HOME'] = '/vol/bitbucket/al4624/inference_cache/hf_home_cache'
+os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/inference_cache/xdg_cache_home'
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer'))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer', 'descriptaudiocodec'))
@@ -33,7 +33,6 @@ parser = argparse.ArgumentParser()
 # Model Configuration:
 parser.add_argument("--stage1_model", type=str, default="m-a-p/YuE-s1-7B-anneal-en-cot", help="The model checkpoint path or identifier for the Stage 1 model.")
 parser.add_argument("--stage2_model", type=str, default="m-a-p/YuE-s2-1B-general", help="The model checkpoint path or identifier for the Stage 2 model.")
-parser.add_argument("--max_new_tokens", type=int, default=3000, help="The maximum number of new tokens to generate in one pass during text generation.")
 parser.add_argument("--repetition_penalty", type=float, default=1.1, help="repetition_penalty ranges from 1.0 to 2.0 (or higher in some cases). It controls the diversity and coherence of the audio tokens generated. The higher the value, the greater the discouragement of repetition. Setting value to 1.0 means no penalty.")
 parser.add_argument("--run_n_segments", type=int, default=2, help="The number of segments to process during the generation.")
 parser.add_argument("--stage2_batch_size", type=int, default=4, help="The batch size used in Stage 2 inference.")
@@ -44,8 +43,6 @@ parser.add_argument("--use_audio_prompt", action="store_true", help="If set, the
 parser.add_argument("--start_audio_prompt_path", type=str, default="", help="The file path to the starting audio file to use as a reference prompt.")
 parser.add_argument("--end_audio_prompt_path", type=str, default="", help="The file path to the ending audio file to use as a reference prompt.")
 parser.add_argument("--gen_duration", type=float, default=10.0, help="The duration of the transition music to be generated.")
-# parser.add_argument("--prompt_start_time", type=float, default=0.0, help="The start time in seconds to extract the audio prompt from the given audio file.")
-# parser.add_argument("--prompt_end_time", type=float, default=30.0, help="The end time in seconds to extract the audio prompt from the given audio file.")
 parser.add_argument("--use_dual_tracks_prompt", action="store_true", help="If set, the model will use dual tracks as a prompt during generation. The vocal and instrumental files should be specified using --vocal_track_prompt_path and --instrumental_track_prompt_path.")
 parser.add_argument("--vocal_track_prompt_path", type=str, default="", help="The file path to a vocal track file to use as a reference prompt when --use_dual_tracks_prompt is enabled.")
 parser.add_argument("--instrumental_track_prompt_path", type=str, default="", help="The file path to an instrumental track file to use as a reference prompt when --use_dual_tracks_prompt is enabled.")
@@ -74,7 +71,7 @@ if args.gen_duration <= 0:
 stage1_model = args.stage1_model
 stage2_model = args.stage2_model
 cuda_idx = args.cuda_idx
-max_new_tokens = args.max_new_tokens
+max_new_tokens = 0 #dummy value, set later
 stage1_output_dir = os.path.join(args.output_dir, f"stage1")
 stage2_output_dir = stage1_output_dir.replace('stage1', 'stage2')
 os.makedirs(stage1_output_dir, exist_ok=True)
@@ -177,29 +174,28 @@ def get_segment_info(start_audio_path, end_audio_path, gen_duration, token_fps =
     return segments
 
 
-def noise_gen_gaussian(range_factor, frame_count):
+def noise_gen_gaussian(range_factor, frame_count, device):
     mean = 0.0
     #portion of values in range = 1 - 1 / range_factor^2
     #value range is 1 here
     std = 1.0 / range_factor
     
     # Gaussian noise: create a random normal distribution that has the same size as the data to add noise to 
-    return np.random.normal(mean, std, frame_count)
+    # Genearte noise with same size as that of the data.
+    return torch.normal(mean=mean, std=std, size=(frame_count,), device=device)
 
-# def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
-#     range_factor = 4 #for gaussian noise generation
-#     start_audio_data = load_audio_mono(start_audio_path)[0]
-#     end_audio_data = load_audio_mono(end_audio_path)[0]
-#     noise_data = noise_gen_gaussian(range_factor, int(noise_duration * sample_rate))
-#     concat_data = np.concatenate((start_audio_data, noise_data, end_audio_data)).astype(np.float32)
-#     return torch.from_numpy(concat_data).reshape(1, -1)
-
-def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
+def prompts_concat(start_audio_path, end_audio_path, noise_duration, device, sample_rate=16000):
     range_factor = 4  # for gaussian noise generation
-    start_audio_data = load_audio_mono(start_audio_path)[0]  # shape: [T]
-    end_audio_data = load_audio_mono(end_audio_path)[0]      # shape: [T]
-    noise_np = noise_gen_gaussian(range_factor, noise_duration * sample_rate)
-    noise_data = torch.from_numpy(noise_np.astype(np.float32))  # convert to tensor
+
+    start_audio_data = load_audio_mono(start_audio_path)[0].to(device)  # shape: [T]
+    end_audio_data = load_audio_mono(end_audio_path)[0].to(device)      # shape: [T]
+
+    noise_data = noise_gen_gaussian(
+        range_factor,
+        int(noise_duration * sample_rate),
+        device,
+    )
+
     concat_data = torch.cat((start_audio_data, noise_data, end_audio_data), dim=0)
     return concat_data.unsqueeze(0)  # shape: [1, T]
 
@@ -242,31 +238,25 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
 
             if args.use_dual_tracks_prompt:
                 raise ValueError("Only supports single track audio prompt for transition generation for now.")
-                # vocals_ids = load_audio_mono(args.vocal_track_prompt_path)
-                # instrumental_ids = load_audio_mono(args.instrumental_track_prompt_path)
-                # vocals_ids = encode_audio(codec_model, vocals_ids, device, target_bw=0.5)
-                # instrumental_ids = encode_audio(codec_model, instrumental_ids, device, target_bw=0.5)
-                # vocals_ids = codectool.npy2ids(vocals_ids[0])
-                # instrumental_ids = codectool.npy2ids(instrumental_ids[0])
-                # ids_segment_interleaved = rearrange([np.array(vocals_ids), np.array(instrumental_ids)], 'b n -> (n b)')
-                # audio_prompt_codec = ids_segment_interleaved[int(args.prompt_start_time*50*2): int(args.prompt_end_time*50*2)]
-                # audio_prompt_codec = audio_prompt_codec.tolist()
             elif args.use_audio_prompt:
                 audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration)
                 raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
-                # Format audio prompt
+                max_new_tokens = len(raw_codes[0][0])
+                print(f"[DEBUG] max_new_tokens is set to {max_new_tokens}")
                 code_ids = codectool.npy2ids(raw_codes[0])
-                # audio_prompt_codec = code_ids[int(args.prompt_start_time *50): int(args.prompt_end_time *50)] # 50 is tps of xcodec
                 audio_prompt_codec = code_ids #no slicing
 
                 #produce segment infos
                 segments = get_segment_info(args.start_audio_prompt_path, args.end_audio_prompt_path,  args.gen_duration)
+                print(f"[DEBUG] segment info:\n{segments}")
 
                  # --- Process Individual Segments to create CoT data for prompt ---
                 for segment in segments:
                     frame_start = segment.get('start')
                     frame_end = segment.get('end')
                     line_content = segment.get('line_content')
+
+                    print(f"[DEBUG] Processing prompt segment with content: {line_content}") 
 
                     raw_codec_instrumental_prompt_segment = raw_codes[:, frame_start:frame_end]
 
@@ -280,11 +270,13 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
                     try:
                         instrumental_prompt_ids_seg = codectool.npy2ids(raw_codec_instrumental_prompt_segment)
 
-                        if  not isinstance(instrumental_prompt_ids_seg, (list, np.ndarray)):
+                        if not isinstance(instrumental_prompt_ids_seg, (list, np.ndarray)):
                             raise TypeError("npy2ids did not return a list or ndarray for segment")
 
                         prompt_ids_segment = np.array(instrumental_prompt_ids_seg)
                         prompt_ids_segment_list = list(prompt_ids_segment)
+
+                        print(f"[DEBUG] Length of segment token sequence: {len(prompt_ids_segment_list)}")
 
                         # --- Construct Segment Tokens ---
                         segment_tokens = []
@@ -305,9 +297,8 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
                         print(f"Segment: {segment}")
                         print(f"Text Input: {text}") # Print the text that was tokenized
 
-
-            # audio_prompt_codec_ids = [mmtokenizer.soa] + codectool.sep_ids + audio_prompt_codec + [mmtokenizer.eoa]
             audio_prompt_codec_ids = prompt_codec_ids
+            print(f"[DEBUG] total prompt segment token count: {len(audio_prompt_codec_ids)}")
             reference_genre_str = f'[Genre] {genres} noisy\n'
             sentence_ids = mmtokenizer.tokenize("[start_of_reference]") + mmtokenizer.tokenize(reference_genre_str) + audio_prompt_codec_ids + mmtokenizer.tokenize("[end_of_reference]")
             head_id = mmtokenizer.tokenize(prompt_texts[0]) + sentence_ids
