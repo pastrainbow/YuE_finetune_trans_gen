@@ -239,7 +239,7 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
             if args.use_dual_tracks_prompt:
                 raise ValueError("Only supports single track audio prompt for transition generation for now.")
             elif args.use_audio_prompt:
-                audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration)
+                audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration, device)
                 raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
                 max_new_tokens = len(raw_codes[0][0])
                 print(f"[DEBUG] max_new_tokens is set to {max_new_tokens}")
