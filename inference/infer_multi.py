@@ -73,10 +73,10 @@ stage1_model = args.stage1_model
 stage2_model = args.stage2_model
 cuda_idx = args.cuda_idx
 max_new_tokens = 0 #initalised to 0, set to appropriate value after ICL audio prompt is generated
-stage1_output_dir = os.path.join(args.output_dir, f"stage1")
-stage2_output_dir = stage1_output_dir.replace('stage1', 'stage2')
-os.makedirs(stage1_output_dir, exist_ok=True)
-os.makedirs(stage2_output_dir, exist_ok=True)
+# stage1_output_dir = os.path.join(args.output_dir, f"stage1")
+# stage2_output_dir = stage1_output_dir.replace('stage1', 'stage2')
+# os.makedirs(stage1_output_dir, exist_ok=True)
+# os.makedirs(stage2_output_dir, exist_ok=True)
 def seed_everything(seed=42): 
     random.seed(seed) 
     np.random.seed(seed) 
@@ -197,6 +197,8 @@ def stage1_inference(model,
                      lyrics, 
                      top_p, 
                      temperature):
+    stage1_output_dir = os.path.join(args.output_dir, track_name, 'stage1')
+    os.makedirs(stage1_output_dir, exist_ok=True)
     stage1_output_set = []
     # intruction
     full_lyrics = "\n".join(lyrics)
@@ -289,25 +291,8 @@ def stage1_inference(model,
     np.save(inst_save_path, instrumentals)
     stage1_output_set.append(vocal_save_path)
     stage1_output_set.append(inst_save_path)
-
-
-    # offload model
-    if not args.disable_offload_model:
-        model.cpu()
-        del model
-        torch.cuda.empty_cache()
     
     return stage1_output_set
-
-audio_prompts_dir_path = args.audio_prompts_dir_path
-start_audio_prompt_paths = [str(file) for file in Path(audio_prompts_dir_path).glob("*.beginning.mp3") if file.is_file()]
-
-with open(args.lyrics_txt) as f:
-    lyrics = split_lyrics(f.read())
-
-# special tokens
-start_of_segment = mmtokenizer.tokenize('[start_of_segment]')
-end_of_segment = mmtokenizer.tokenize('[end_of_segment]')
 
 
 def get_file_base_name(filepath):
@@ -324,46 +309,6 @@ def get_genre_str(track_name):
         genres = ' '.join(track_info['genres'])
         print(f"[DEBUG] Genres: {genres}")
         return genres
-
-
-stage1_output_sets = []
-for start_audio_prompt_path in start_audio_prompt_paths:
-    prompt_track_name = get_file_base_name(start_audio_prompt_path)
-    end_audio_prompt_path = os.path.join(audio_prompts_dir_path, prompt_track_name + '.end.mp3')
-
-    print(f"[DEBUG] Start prompt track path: {start_audio_prompt_path}")
-    print(f"[DEBUG] Prompt track name: {prompt_track_name}")
-
-    genres = get_genre_str(prompt_track_name)
-    instruction = gen_ICL_trans_gen_instruction(start_audio_prompt_path, args.gen_duration)
-
-    # Call the function and print the result
-    stage1_output_set = stage1_inference(model, 
-                                        instruction,
-                                        start_audio_prompt_path,
-                                        end_audio_prompt_path,
-                                        prompt_track_name,
-                                        genres, 
-                                        lyrics, 
-                                        0.93, 
-                                        1.0)
-    stage1_output_sets.append(stage1_output_sets)
-
-
-stage1_output_set = stage1_output_sets[0]
-
-print("Stage 2 inference...")
-model_stage2 = AutoModelForCausalLM.from_pretrained(
-    stage2_model, 
-    torch_dtype=torch.bfloat16,
-    attn_implementation="flash_attention_2",
-    # device_map="auto",
-    )
-model_stage2.to(device)
-model_stage2.eval()
-
-if torch.__version__ >= "2.0.0":
-    model_stage2 = torch.compile(model_stage2)
 
 def stage2_generate(model, prompt, batch_size=16):
     codec_ids = codectool.unflatten(prompt, n_quantizer=1)
@@ -433,8 +378,10 @@ def stage2_generate(model, prompt, batch_size=16):
 
     return output
 
-def stage2_inference(model, stage1_output_set, stage2_output_dir, batch_size=4):
+def stage2_inference(model, stage1_output_set, track_name, batch_size=4):
     print(f"[DEBUG] stage 1 output: {stage1_output_set}")
+    stage2_output_dir = os.path.join(args.output_dir, track_name, 'stage2')
+    os.makedirs(stage2_output_dir, exist_ok=True)
     stage2_result = []
     for i in tqdm(range(len(stage1_output_set))):
         output_filename = os.path.join(stage2_output_dir, os.path.basename(stage1_output_set[i]))
@@ -493,10 +440,6 @@ def stage2_inference(model, stage1_output_set, stage2_output_dir, batch_size=4):
         stage2_result.append(output_filename)
     return stage2_result
 
-stage2_result = stage2_inference(model_stage2, stage1_output_set, stage2_output_dir, batch_size=args.stage2_batch_size)
-print(stage2_result)
-print('Stage 2 DONE.\n')
-
 
 # convert audio tokens to audio
 def save_audio(wav: torch.Tensor, path, sample_rate: int, rescale: bool = False):
@@ -509,10 +452,10 @@ def save_audio(wav: torch.Tensor, path, sample_rate: int, rescale: bool = False)
     torchaudio.save(str(path), wav, sample_rate=sample_rate, encoding='PCM_S', bits_per_sample=16)
 
 
-def post_process_codes(stage2_result):
+def post_process_codes(stage2_result, track_name):
     # reconstruct tracks
-    recons_output_dir = os.path.join(args.output_dir, "recons")
-    recons_mix_dir = os.path.join(recons_output_dir, 'mix')
+    recons_output_dir = os.path.join(args.output_dir, track_name, "recons")
+    recons_mix_dir = os.path.join(recons_output_dir, track_name,'mix')
     os.makedirs(recons_mix_dir, exist_ok=True)
     tracks = []
     for npy in stage2_result:
@@ -546,9 +489,9 @@ def post_process_codes(stage2_result):
 
     # vocoder to upsample audios
     vocal_decoder, inst_decoder = build_codec_model(args.config_path, args.vocal_decoder_path, args.inst_decoder_path)
-    vocoder_output_dir = os.path.join(args.output_dir, 'vocoder')
-    vocoder_stems_dir = os.path.join(vocoder_output_dir, 'stems')
-    vocoder_mix_dir = os.path.join(vocoder_output_dir, 'mix')
+    vocoder_output_dir = os.path.join(args.output_dir, track_name, 'vocoder')
+    vocoder_stems_dir = os.path.join(vocoder_output_dir, track_name,  'stems')
+    vocoder_mix_dir = os.path.join(vocoder_output_dir, track_name, 'mix')
     os.makedirs(vocoder_mix_dir, exist_ok=True)
     os.makedirs(vocoder_stems_dir, exist_ok=True)
     for npy in stage2_result:
@@ -591,5 +534,84 @@ def post_process_codes(stage2_result):
         cutoff_freq=5500.0
     )
 
-    
-post_process_codes(stage2_result)
+
+def stage1_pipeline(prompt_track_name):
+    start_audio_prompt_path = os.path.join(audio_prompts_dir_path, prompt_track_name + '.beginning.mp3')
+    end_audio_prompt_path = os.path.join(audio_prompts_dir_path, prompt_track_name + '.end.mp3')
+
+    print(f"[DEBUG] Start prompt track path: {start_audio_prompt_path}")
+    print(f"[DEBUG] Prompt track name: {prompt_track_name}")
+
+    genres = get_genre_str(prompt_track_name)
+    instruction = gen_ICL_trans_gen_instruction(start_audio_prompt_path, args.gen_duration)
+
+    # Call the function and print the result
+    stage1_output_set = stage1_inference(model, 
+                                        instruction,
+                                        start_audio_prompt_path,
+                                        end_audio_prompt_path,
+                                        prompt_track_name,
+                                        genres, 
+                                        lyrics, 
+                                        0.93, 
+                                        1.0)
+    return stage1_output_set
+
+def stage2_and_post_proc_pipeline(stage1_output_set, track_name):
+    model_stage2 = AutoModelForCausalLM.from_pretrained(
+        stage2_model, 
+        torch_dtype=torch.bfloat16,
+        attn_implementation="flash_attention_2",
+        # device_map="auto",
+        )
+    model_stage2.to(device)
+    model_stage2.eval()
+
+    if torch.__version__ >= "2.0.0":
+        model_stage2 = torch.compile(model_stage2)
+
+
+    stage2_result = stage2_inference(model_stage2, stage1_output_set, track_name, batch_size=args.stage2_batch_size)
+    print(stage2_result)
+    print('Stage 2 DONE.\n')
+
+    post_process_codes(stage2_result, track_name)
+
+
+audio_prompts_dir_path = args.audio_prompts_dir_path
+start_audio_prompt_paths = [str(file) for file in Path(audio_prompts_dir_path).glob("*.beginning.mp3") if file.is_file()]
+
+with open(args.lyrics_txt) as f:
+    lyrics = split_lyrics(f.read())
+
+# special tokens
+start_of_segment = mmtokenizer.tokenize('[start_of_segment]')
+end_of_segment = mmtokenizer.tokenize('[end_of_segment]')
+
+#set up output directories and collect prompt track names
+prompt_track_names = []
+for start_audio_prompt_path in start_audio_prompt_paths:
+    prompt_track_name = get_file_base_name(start_audio_prompt_path)
+    prompt_track_names.append(prompt_track_name)
+    track_dir = os.path.join(args.output_dir, prompt_track_name)
+    os.makedirs(track_dir, exist_ok=True)
+
+print(f"[DEBUG] Track names: {prompt_track_names}")
+
+#stage 1 inference loop
+stage1_output_sets = {}
+for prompt_track_name in prompt_track_names:
+    stage1_output_set = stage1_pipeline(prompt_track_name)
+    stage1_output_sets[prompt_track_name] = stage1_output_set
+
+# offload model
+if not args.disable_offload_model:
+    model.cpu()
+    del model
+    torch.cuda.empty_cache()
+
+#stage 2 inference and post processing loop
+for track_name, stage1_output_set in stage1_output_sets.items():
+    print("Stage 2 inference...")
+    stage2_and_post_proc_pipeline(stage1_output_set, track_name)
+   
