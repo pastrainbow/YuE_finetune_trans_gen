@@ -27,6 +27,7 @@ from mmtokenizer import _MMSentencePieceTokenizer
 from models.soundstream_hubert_new import SoundStream
 from vocoder import build_codec_model, process_audio
 from post_process_audio import replace_low_freq_with_energy_matched
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from mutagen.mp3 import MP3
 from pathlib import Path
 
@@ -555,7 +556,7 @@ def stage1_pipeline(prompt_track_name):
                                         lyrics, 
                                         0.93, 
                                         1.0)
-    return stage1_output_set
+    return (prompt_track_name, stage1_output_set)
 
 def stage2_and_post_proc_pipeline(stage1_output_set, track_name):
     model_stage2 = AutoModelForCausalLM.from_pretrained(
@@ -598,20 +599,31 @@ for start_audio_prompt_path in start_audio_prompt_paths:
 
 print(f"[DEBUG] Track names: {prompt_track_names}")
 
-#stage 1 inference loop
 stage1_output_sets = {}
-for prompt_track_name in prompt_track_names:
-    stage1_output_set = stage1_pipeline(prompt_track_name)
-    stage1_output_sets[prompt_track_name] = stage1_output_set
+if __name__ == "__main__":
+    #stage 1 inference loop
+    with ProcessPoolExecutor() as executor:
+        futures = [
+            executor.submit(stage1_pipeline, prompt_track_name) 
+            for prompt_track_name in prompt_track_names
+        ]
+        for future in as_completed(futures):
+            track_name, stage1_output_set = future.result()
+            if track_name:
+                stage1_output_sets[track_name] = stage1_output_set
 
-# offload model
-if not args.disable_offload_model:
-    model.cpu()
-    del model
-    torch.cuda.empty_cache()
+    # offload model
+    if not args.disable_offload_model:
+        model.cpu()
+        del model
+        torch.cuda.empty_cache()
 
-#stage 2 inference and post processing loop
-for track_name, stage1_output_set in stage1_output_sets.items():
     print("Stage 2 inference...")
-    stage2_and_post_proc_pipeline(stage1_output_set, track_name)
+
+    #stage 2 inference and post processing loop
+    with ProcessPoolExecutor() as executor:
+        futures = [
+            executor.submit(stage2_and_post_proc_pipeline, stage1_output_set, track_name)
+            for track_name, stage1_output_set in stage1_output_sets.items()
+        ]
    
