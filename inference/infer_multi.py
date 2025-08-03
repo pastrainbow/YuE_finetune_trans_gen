@@ -16,6 +16,7 @@ from collections import Counter
 import argparse
 import numpy as np
 import torch
+torch.multiprocessing.set_start_method("spawn", force=True)
 import torchaudio
 from torchaudio.transforms import Resample
 import soundfile as sf
@@ -299,17 +300,16 @@ def stage1_inference(model,
 def get_file_base_name(filepath):
     return Path(filepath).name.split('.')[0]
 
-def get_genre_str(track_name):
-    with open(args.track_info_json) as f:
-        track_infos = json.load(f)['infos']
-        track_info = None
-        for info in track_infos:
-            if info['track_name'] == track_name:
-                track_info = info
-                break
-        genres = ' '.join(track_info['genres'])
-        print(f"[DEBUG] Genres: {genres}")
-        return genres
+def get_genre_str(track_name, track_infos):
+
+    track_info = None
+    for info in track_infos:
+        if info['track_name'] == track_name:
+            track_info = info
+            break
+    genres = ' '.join(track_info['genres'])
+    print(f"[DEBUG] Genres: {genres}")
+    return genres
 
 def stage2_generate(model, prompt, batch_size=16):
     codec_ids = codectool.unflatten(prompt, n_quantizer=1)
@@ -542,8 +542,12 @@ def stage1_pipeline(prompt_track_name):
 
     print(f"[DEBUG] Start prompt track path: {start_audio_prompt_path}")
     print(f"[DEBUG] Prompt track name: {prompt_track_name}")
+    track_infos = None
+    
+    with open(args.track_info_json) as f:
+        track_infos = json.load(f)['infos']
 
-    genres = get_genre_str(prompt_track_name)
+    genres = get_genre_str(prompt_track_name, track_infos)
     instruction = gen_ICL_trans_gen_instruction(start_audio_prompt_path, args.gen_duration)
 
     # Call the function and print the result
@@ -602,7 +606,7 @@ print(f"[DEBUG] Track names: {prompt_track_names}")
 stage1_output_sets = {}
 if __name__ == "__main__":
     #stage 1 inference loop
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers = 4) as executor:
         futures = [
             executor.submit(stage1_pipeline, prompt_track_name) 
             for prompt_track_name in prompt_track_names
@@ -621,7 +625,7 @@ if __name__ == "__main__":
     print("Stage 2 inference...")
 
     #stage 2 inference and post processing loop
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers = 4) as executor:
         futures = [
             executor.submit(stage2_and_post_proc_pipeline, stage1_output_set, track_name)
             for track_name, stage1_output_set in stage1_output_sets.items()

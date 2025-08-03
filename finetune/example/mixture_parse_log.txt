@@ -1,0 +1,3 @@
+[INFO] Loaded cfg from example/trans_gen_data_mixture_cfg.yml
+[INFO] TOKEN_COUNT_LOG_DIR: ./count_token_logs
+[INFO] Checking token count log from ./count_token_logs/count.._example_mmap_trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document.bin.log

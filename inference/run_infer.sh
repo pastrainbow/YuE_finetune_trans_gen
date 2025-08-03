@@ -3,9 +3,6 @@
 #SBATCH --mail-user=al4624
 #SBATCH --output=run_YuE_infer%j.out
 
-# find /vol/bitbucket/al4624/inference_cache/transformer_cache/  -type f -delete
-# find /vol/bitbucket/al4624/inference_cache/hf_home_cache/  -type f -delete
-# find /vol/bitbucket/al4624/inference_cache/xdg_cache_home/  -type f -delete
 python infer.py \
     --cuda_idx 0 \
     --stage1_model m-a-p/YuE-s1-7B-anneal-en-icl \

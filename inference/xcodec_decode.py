@@ -26,7 +26,7 @@ def save_audio(wav: torch.Tensor, path, sample_rate: int, rescale: bool = False)
 #no upsampling, no stage 2 model, so quality is not going to be amazing
 def decode(npy, save_path, codec_model, device):
     tracks = []
-    codec_result = np.load(npy)
+    codec_result = np.load(npy)[0:1, :]
     decodec_rlt=[]
     with torch.no_grad():
         decoded_waveform = codec_model.decode(torch.as_tensor(codec_result.astype(np.int16), dtype=torch.long).unsqueeze(0).permute(1, 0, 2).to(device))
@@ -52,8 +52,8 @@ codec_model.eval()
 
 #decode
 # reconstruct track
-npy = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes/107694.Instrumental.noised.npy"
-save_path = "/homes/al4624/Documents/YuE_finetune/107694.Instrumental.Reconstruction.mp3"
+npy = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/mixture_codes/078303.npy"
+save_path = "/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/mixture_codes/078303.mp3"
 decode(npy, save_path, codec_model, device)
 
 

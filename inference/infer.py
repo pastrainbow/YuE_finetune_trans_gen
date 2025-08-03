@@ -251,17 +251,15 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
                 # audio_prompt_codec = ids_segment_interleaved[int(args.prompt_start_time*50*2): int(args.prompt_end_time*50*2)]
                 # audio_prompt_codec = audio_prompt_codec.tolist()
             elif args.use_audio_prompt:
-                audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration, device)
-                raw_codes_real = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
+                #audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration, device)
+                #raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
                 #np.save("/homes/al4624/Documents/YuE_finetune/test_files/prompt_concat_codes.npy", raw_codes_real)
-                print(f"[DEBUG] real raw codes: {raw_codes_real}, with shape {raw_codes_real.shape}")
+                # print(f"[DEBUG] real raw codes: {raw_codes_real}, with shape {raw_codes_real.shape}")
 
 
-                raw_codes = np.load("/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes/078303.Instrumental.noised.npy")[0]
+                raw_codes = np.load("/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes/078303.Instrumental.noised.npy")[0:1, :]
                 raw_codes = np.expand_dims(raw_codes, axis=0)
-                raw_codes = np.expand_dims(raw_codes, axis=0)
-                print(f"[DEBUG] loaded raw codes: {raw_codes}, with shape {raw_codes.shape}")
-
+                # print(f"[DEBUG] loaded raw codes: {raw_codes}, with shape {raw_codes.shape}")
 
                 max_new_tokens = len(raw_codes[0][0])
                 print(f"[DEBUG] max_new_tokens is set to {max_new_tokens}")
@@ -322,7 +320,10 @@ for i in range(range_begin, len(soa_idx)):
     if codec_ids[0] == 32016:
         codec_ids = codec_ids[1:]
     codec_ids = codec_ids[:2 * (codec_ids.shape[0] // 2)]
+    print(f"[DEBUG] codec ids: {codec_ids}")
+    print(f"[DEBUG] codec shape: {codec_ids.shape[0]}")
     vocals_ids = codectool.ids2npy(rearrange(codec_ids,"(n b) -> b n", b=2)[0])
+    # vocals_ids = codectool.ids2npy(rearrange(codec_ids,"(n b) -> b n", b=2)[1])
     vocals.append(vocals_ids)
     instrumentals_ids = codectool.ids2npy(rearrange(codec_ids,"(n b) -> b n", b=2)[1])
     instrumentals.append(instrumentals_ids)

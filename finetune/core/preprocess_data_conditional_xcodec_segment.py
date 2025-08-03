@@ -66,10 +66,12 @@ class Encoder(EncoderBase):
         """Encodes codec data for stage 2 training."""
         data = json.loads(json_line)
 
+        n_quantizer = Encoder.codectool.n_quantizer
+
         ids = {}
         lens = {}
 
-        raw_codec = np.load(data[Encoder.codectool.data_feature]).astype(np.int32)
+        raw_codec = np.load(data[Encoder.codectool.data_feature])[0:n_quantizer, :].astype(np.int32)
         if DEBUG: print(f"[DEBUG] raw mixture codec: {raw_codec}")
         raw_codec = torch.as_tensor(raw_codec, dtype=torch.int32)
         # fps*duration: 50fps*6s = 300
@@ -93,7 +95,6 @@ class Encoder(EncoderBase):
             try:
                 # extract specified layers of codebooks
                 quantizer_begin = Encoder.codectool.quantizer_begin
-                n_quantizer = Encoder.codectool.n_quantizer
                 codes = frames[quantizer_begin : quantizer_begin + n_quantizer].numpy()
 
                 # convert codes to ids
@@ -187,9 +188,9 @@ class Encoder(EncoderBase):
         segmented_lyrics = data['splitted_lyrics']['segmented_lyrics']
 
         try:
-            raw_codec_vocals = np.load(data['vocals_codec'])
-            raw_codec_instrumental = np.load(data['instrumental_codec'])
-            raw_codec_noised_instrumental = np.load(data['noised_instrumental_codec'])
+            raw_codec_vocals = np.load(data['vocals_codec'])[0:1, :]
+            raw_codec_instrumental = np.load(data['instrumental_codec'])[0:1, :]
+            raw_codec_noised_instrumental = np.load(data['noised_instrumental_codec'])[0:1, :]
             if DEBUG:
                 print(f"[DEBUG] Raw vocals codec: {raw_codec_vocals}")
                 print(f"[DEBUG] Raw inst codec: {raw_codec_instrumental}")
@@ -197,7 +198,7 @@ class Encoder(EncoderBase):
             # Load mixture codec only if needed for ICL prompt or future use
             raw_codec_mixture = None
             if self.args.use_audio_icl and self.args.audio_prompt_mode == "mixture":
-                 raw_codec_mixture = np.load(data['codec'])
+                 raw_codec_mixture = np.load(data['codec'])[0:1, :]
         except FileNotFoundError as e:
             mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
             print(f"Error loading codec file {mode_str}: {e}. Skipping data ID {data['id']}.")

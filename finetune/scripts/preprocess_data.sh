@@ -36,7 +36,7 @@ elif [ "$DATA_SETTING" == "trans_gen" ]; then
        DROPOUT=0.0
        KEEP_SEQUENTIAL_SAMPLES=true
        QUANTIZER_BEGIN_IDX=0
-       NUM_QUANTIZERS=8 #modify this according to the dataset codes
+       NUM_QUANTIZERS=1 #modify this according to the dataset codes
 else
     echo "Invalid setting: $DATA_SETTING"
     exit 1
