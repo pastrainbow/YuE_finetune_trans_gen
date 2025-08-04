@@ -116,7 +116,7 @@ GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
 SEQ_LENGTH=8192
 TRAIN_ITERS=1271
-NUM_TRAIN_EPOCHS=5
+NUM_TRAIN_EPOCHS=1
 
 # Data paths (replace with your actual paths)
 DATA_PATH="83319973 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"

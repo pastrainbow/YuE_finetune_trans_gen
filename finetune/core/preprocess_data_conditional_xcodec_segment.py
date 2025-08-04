@@ -62,100 +62,6 @@ class Encoder(EncoderBase):
         super().__init__(args)
         self.args = args
 
-    def encode_codec_stage_2(self, json_line):
-        """Encodes codec data for stage 2 training."""
-        data = json.loads(json_line)
-
-        n_quantizer = Encoder.codectool.n_quantizer
-
-        ids = {}
-        lens = {}
-
-        raw_codec = np.load(data[Encoder.codectool.data_feature])[0:n_quantizer, :].astype(np.int32)
-        if DEBUG: print(f"[DEBUG] raw mixture codec: {raw_codec}")
-        raw_codec = torch.as_tensor(raw_codec, dtype=torch.int32)
-        # fps*duration: 50fps*6s = 300
-        fps = Encoder.codectool.fps
-        duration = 6 # Target duration for stage 2 segments
-        segment_length = fps * duration
-
-        # Ensure raw_codec has a temporal dimension before splitting
-        if raw_codec.ndim < 2 or raw_codec.shape[1] == 0:
-            print(f"Warning: Invalid raw_codec shape {raw_codec.shape} for stage 2 in {data.get('id', 'unknown')}. Skipping.")
-            return {}, {}, len(json_line) + get_size_in_bytes(raw_codec)
-
-        segmented_frames_all = torch.split(raw_codec, segment_length, dim=1)
-
-        # Keep only segments that have the exact length (discard last partial segment)
-        segmented_frames_all = [frame for frame in segmented_frames_all if frame.shape[1] == segment_length]
-
-        doc_ids = []
-        sentence_lens = [] # here sentence means segment
-        for frames in segmented_frames_all:
-            try:
-                # extract specified layers of codebooks
-                quantizer_begin = Encoder.codectool.quantizer_begin
-                codes = frames[quantizer_begin : quantizer_begin + n_quantizer].numpy()
-
-                # convert codes to ids
-                flattened_ids = np.array(Encoder.codectool.npy2ids(codes))
-                # Check if flattened_ids is empty, which can happen if npy2ids fails or codes are invalid
-                if flattened_ids.size == 0:
-                     print(f"Warning: flattened_ids is empty for a segment in {data.get('id', 'unknown')}. Skipping segment.")
-                     continue
-
-                unflattened_ids = Encoder.codectool.unflatten(flattened_ids, n_quantizer)
-                # Check dimensions after unflattening
-                if unflattened_ids.shape[0] == 0 or unflattened_ids.shape[1] == 0:
-                     print(f"Warning: unflattened_ids has zero dimension {unflattened_ids.shape} in {data.get('id', 'unknown')}. Skipping segment.")
-                     continue
-
-                codebook_0 = unflattened_ids[0]
-                # count num of unique codes, if < 25, skip (ensure enough variation)
-                if len(np.unique(codebook_0)) < 25:
-                    continue
-
-                codebook_rest = unflattened_ids[1:]
-                codebook_0_list = codebook_0.tolist()
-                codebook_rest_list = einops.rearrange(codebook_rest, 'K T -> (T K)').tolist()
-
-                # <SOA><stage_1>...codebook 0...<stage_2>...codebook 1-N flattened...<EOA>
-                # Or with teacher forcing: <SOA><stage_1>...codebook 0...<stage_2>...all flattened codes...<EOA>
-                if not Encoder.codectool.teacher_forcing:
-                    codec_ids = ([Encoder.tokenizer.soa, Encoder.tokenizer.stage_1] +
-                                 codebook_0_list +
-                                 [Encoder.tokenizer.stage_2] +
-                                 codebook_rest_list +
-                                 [Encoder.tokenizer.eoa])
-                else:
-                    codec_ids = ([Encoder.tokenizer.soa, Encoder.tokenizer.stage_1] +
-                                 codebook_0_list +
-                                 [Encoder.tokenizer.stage_2] +
-                                 flattened_ids.tolist() + # Use all flattened IDs for teacher forcing
-                                 [Encoder.tokenizer.eoa])
-
-                sentence_ids = codec_ids
-                doc_ids.extend(sentence_ids)
-                sentence_lens.append(len(sentence_ids))
-
-            except Exception as e:
-                print(f"Error processing segment in encode_codec_stage_2: {e}")
-                print(f"Data ID: {data.get('id', 'unknown')}, Feature Path: {data.get(Encoder.codectool.data_feature, 'unknown')}")
-                print(f"Segment Shape: {frames.shape}")
-                print(f"FPS: {fps}")
-
-
-        if len(doc_ids) > 0 and self.args.append_eod:
-            doc_ids.append(Encoder.tokenizer.eod)
-            sentence_lens[-1] += 1
-
-        key = "text" # hardcode key
-        ids[key] = doc_ids
-        lens[key] = sentence_lens
-
-        return ids, lens, len(json_line) + get_size_in_bytes(raw_codec)
-
-
     def encode_token_level_interleave(self, json_line):
         """
         Encodes text and interleaved vocal/instrumental codecs.
@@ -347,6 +253,8 @@ class Encoder(EncoderBase):
             frame_end = segment.get('codec_frame_end')
             line_content = segment.get('line_content')
 
+            if DEBUG: print(f"[DEBUG] Processing segment with line content {line_content}")
+
             # Basic validation of segment data
             if duration is None or frame_start is None or frame_end is None or line_content is None:
                 if DEBUG: print(f"Skipping segment due to missing keys: {segment} in {data['id']}")
@@ -390,6 +298,9 @@ class Encoder(EncoderBase):
                 vocals_ids_seg = Encoder.codectool.npy2ids(raw_codec_vocals_segment)
                 instrumental_ids_seg = Encoder.codectool.npy2ids(raw_codec_instrumental_segment)
 
+                if DEBUG: print(f"[DEBUG] Vocals segment ids: {vocals_ids_seg}")
+                if DEBUG: print(f"[DEBUG] Inst segment ids: {instrumental_ids_seg}")
+
                 if not isinstance(vocals_ids_seg, (list, np.ndarray)) or not isinstance(instrumental_ids_seg, (list, np.ndarray)):
                     raise TypeError("npy2ids did not return a list or ndarray for segment")
                 if len(vocals_ids_seg) != len(instrumental_ids_seg):
@@ -402,6 +313,8 @@ class Encoder(EncoderBase):
 
                 ids_segment_interleaved = rearrange([np.array(vocals_ids_seg), np.array(instrumental_ids_seg)], 'b n -> (n b)')
                 ids_segment_interleaved_list = list(ids_segment_interleaved)
+
+                if DEBUG: print(f"[DEBUG] Interleaved ids list: {ids_segment_interleaved_list}")
 
                 if DEBUG: print(f"Length of the audio codes for segment {line_content}: {len(ids_segment_interleaved_list)}")
 

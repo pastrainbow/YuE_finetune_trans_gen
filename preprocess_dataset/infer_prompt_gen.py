@@ -51,8 +51,8 @@ def split_file(file_path):
 
         info_json["track_name"] = track_name
         info_json["genres"] = get_genres_from_id(int(track_name))
-        info_json["endpoint_1"] = beginning_segment_end
-        info_json["endpoint_2"] = end_segment_start
+        info_json["endpoint_1"] = beginning_segment_end / sample_rate
+        info_json["endpoint_2"] = end_segment_start / sample_rate
         
         sf.write(os.path.join(seg_split_dir_path, track_name + ".beginning.mp3"), audio_data_beginning, sample_rate)
 
