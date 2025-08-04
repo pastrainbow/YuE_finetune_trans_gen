@@ -8,7 +8,7 @@ rm -rf ../output
 
 python infer.py \
     --cuda_idx 0 \
-    --stage1_model /vol/bitbucket/al4624/model_output \
+    --stage1_model /vol/bitbucket/al4624/model_output/checkpoint-785 \
     --stage2_model m-a-p/YuE-s2-1B-general \
     --gen_duration 10.0 \
     --use_audio_prompt \

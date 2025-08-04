@@ -75,11 +75,13 @@ def calc_KL_div_for_track(model, track_path, track_info_file_path):
     kl_div_start = calc_KL_div(probs["start"], probs["middle"])
     kl_div_end = calc_KL_div(probs["end"], probs["middle"])
 
-    kl_div = (kl_div_start + kl_div_end) / 2
+    # print(f"[DEBUG] KL divergence for track {track_name}: {kl_div}")
 
-    print(f"[DEBUG] KL divergence for track {track_name}: {kl_div}")
-
-    return (track_name, kl_div)
+    return {
+            "track_name": track_name,
+            "kl_div_start": kl_div_start,
+            "kl_div_end": kl_div_end,
+            }
 
 
 track_info_file_path = "/homes/al4624/Documents/YuE_finetune/inference_testing_dataset/track_info/info.json"
@@ -89,15 +91,21 @@ gen_track_paths = [str(file) for file in Path(gen_track_dir_path).glob("*.mp3") 
 
 model = load_model(mode="logits").cuda()
 
-if __name__ == "__main__":
-    with ProcessPoolExecutor() as executor:
-        track_kl_divs = {}
-        futures = [executor.submit(calc_KL_div_for_track, model, gen_track_path, track_info_file_path) for gen_track_path in gen_track_paths]
-        for future in as_completed(futures):
-            track_kl_div = future.result()
-            if track_kl_div:
-                track_name, kl_div = track_kl_div
-                track_kl_divs[track_name] = kl_div
+# if __name__ == "__main__":
+#     with ProcessPoolExecutor() as executor:
+#         track_kl_divs = {}
+#         futures = [executor.submit(calc_KL_div_for_track, model, gen_track_path, track_info_file_path) for gen_track_path in gen_track_paths]
+#         for future in as_completed(futures):
+#             track_kl_div = future.result()
+#             if track_kl_div:
+#                 track_name, kl_div = track_kl_div
+#                 track_kl_divs[track_name] = kl_div
+
+track_kl_divs = []
+for gen_track_path in gen_track_paths:
+    track_kl_div = calc_KL_div_for_track(model, gen_track_path, track_info_file_path)
+    track_kl_divs.append(track_kl_div)
+
 print(track_kl_divs)
 
 

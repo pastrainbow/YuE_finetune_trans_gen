@@ -70,7 +70,7 @@ class Encoder(EncoderBase):
         lens = {}
 
         segmented_lyrics = data['splitted_lyrics']['segmented_lyrics']
-        raw_codec = np.load(data['codec'])
+        raw_codec = np.load(data['codec'])[0:1, :]
 
         full_length_of_song = data['audio_length_in_sec']
         # Handle potential division by zero or invalid full_length_of_song
@@ -169,7 +169,7 @@ class Encoder(EncoderBase):
         ids = {}
         lens = {}
 
-        raw_codec = np.load(data[Encoder.codectool.data_feature]).astype(np.int32)
+        raw_codec = np.load(data[Encoder.codectool.data_feature])[0:1, :].astype(np.int32)
         raw_codec = torch.as_tensor(raw_codec, dtype=torch.int32)
         # fps*duration: 50fps*6s = 300
         fps = Encoder.codectool.fps
@@ -286,12 +286,12 @@ class Encoder(EncoderBase):
         segmented_lyrics = data['splitted_lyrics']['segmented_lyrics']
 
         try:
-            raw_codec_vocals = np.load(data['vocals_codec'])
-            raw_codec_instrumental = np.load(data['instrumental_codec'])
+            raw_codec_vocals = np.load(data['vocals_codec'])[0:1, :]
+            raw_codec_instrumental = np.load(data['instrumental_codec'])[0:1, :]
             # Load mixture codec only if needed for ICL prompt or future use
             raw_codec_mixture = None
             if self.args.use_audio_icl and self.args.audio_prompt_mode == "mixture":
-                 raw_codec_mixture = np.load(data['codec'])
+                 raw_codec_mixture = np.load(data['codec'])[0:1, :]
         except FileNotFoundError as e:
             mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
             print(f"Error loading codec file {mode_str}: {e}. Skipping data ID {data['id']}.")

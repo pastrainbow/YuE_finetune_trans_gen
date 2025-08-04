@@ -175,7 +175,6 @@ class Encoder(EncoderBase):
 
         doc_ids = []
         sentence_lens = [] # here sentence means segment
-
         instruction = gen_ICL_trans_gen_instruction(data)
 
         if DEBUG: print(f"[FINETUNE] instruciton prompt: {instruction}")
@@ -188,6 +187,12 @@ class Encoder(EncoderBase):
                 raw_codec_instrumental_prompt = raw_codec_noised_instrumental
                 instrumental_ids_prompt = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt)
 
+                # Check if ids are valid lists/arrays
+                if not isinstance(instrumental_ids_prompt, (list, np.ndarray)):
+                    raise TypeError("npy2ids did not return list/ndarray for prompt segment")
+                if len(instrumental_ids_prompt) == 0:
+                    raise ValueError("Empty codec IDs generated for prompt segment")
+
                 options_codecs = {}
                 selected_option = self.args.audio_prompt_mode
 
@@ -197,6 +202,7 @@ class Encoder(EncoderBase):
                     raise ValueError(f"Only supports instrumental mode")
                 elif selected_option == "inst":
                     options_codecs['inst'] = np.array(instrumental_ids_prompt)
+                    if DEBUG: print(f"[DEBUG] inst codec shape: {options_codecs['inst'].shape} has content: {options_codecs['inst']}")
                 elif selected_option == "vocal":
                     raise ValueError(f"Only supports instrumental mode")
                 else:
@@ -205,6 +211,14 @@ class Encoder(EncoderBase):
                 audio_prompt_codec_array = options_codecs[selected_option]
 
                 if DEBUG: print(f"[DEBUG] Length of reference noised audio ids to be input: {len(list(audio_prompt_codec_array))}")
+
+                 # Filter prompts with low variation, since dataset contains vocal only tracks, where instrumental track is only silence
+                min_unique_ratio = 0.1
+                if (len(np.unique(audio_prompt_codec_array)) < len(audio_prompt_codec_array) * min_unique_ratio):
+                    print(f"Warning: Skipping due to low variation ({len(np.unique(audio_prompt_codec_array))} unique) for {data['id']} with codec path {data['codec']}")
+                    bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_noised_instrumental) 
+                    return {}, {}, bytes_processed
+
 
                 audio_prompt_codec_ids = ([Encoder.tokenizer.soa] + Encoder.codectool.sep_ids +
                                         list(audio_prompt_codec_array) +
@@ -234,14 +248,6 @@ class Encoder(EncoderBase):
             # --- End ICL Header ---
 
         elif self.args.cot:
-            # # Construct standard CoT Header (no audio prompt)
-            # genre_str = '[Genre] ' + data['genres']
-            # complete_lyrics = '\n'.join([l.get('line_content', '') for l in segmented_lyrics])
-            # # Format: <Instruction> \n <Genre> \n <Lyrics>
-            # head = f'{instruction}\n{genre_str}\n{complete_lyrics}'
-            # head_ids = Encoder.tokenizer.tokenize(head)
-            # doc_ids.extend(head_ids)
-            # sentence_lens.append(len(head_ids))
             raise ValueError("Only ICL finetune supported, no COT!")
         # Else: No CoT, no ICL - header is implicitly handled per segment (instruction prepended)
 
@@ -329,11 +335,6 @@ class Encoder(EncoderBase):
                                      [Encoder.tokenizer.eoa] +
                                      Encoder.tokenizer.tokenize('[end_of_segment]'))
                 else:
-                    # Standard non-CoT format: <text> <SOA> <sep> <interleaved_codec> <EOA>
-                    # codec_tokens = ([Encoder.tokenizer.soa] + Encoder.codectool.sep_ids +
-                    #                 ids_segment_interleaved_list +
-                    #                 [Encoder.tokenizer.eoa])
-                    # segment_tokens = text_ids + codec_tokens
                     raise ValueError("Only CoT format supposrted for transition generaiton!")
 
                 doc_ids.extend(segment_tokens)

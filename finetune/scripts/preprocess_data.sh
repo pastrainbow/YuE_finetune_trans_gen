@@ -94,7 +94,7 @@ elif [ "$MODE_TYPE" == "icl_cot" ]; then
            MODE_MMAP_NAME=${MMAP_NAME}_${mode} # Mode specific path
            mkdir -p $DATA_ROOT/$MODE_MMAP_NAME # Ensure mode-specific dir exists
 
-           args="python core/preprocess_data_conditional_xcodec_segment.py \
+           args="python core/preprocess_data_conditional_xcodec_segment_original.py \
                   --input $DATA_ROOT/$JSONL_NAME \
                   --output-prefix $DATA_ROOT/$MODE_MMAP_NAME \
                   --tokenizer-model $TOKENIZER_MODEL \

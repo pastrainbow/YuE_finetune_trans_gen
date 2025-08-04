@@ -158,26 +158,6 @@ def gen_ICL_trans_gen_instruction(start_audio_path, gen_duration, token_fps=50):
 
     return instruction
 
-# def noise_gen_gaussian(range_factor, frame_count, device):
-#     mean = 0.0
-#     #portion of values in range = 1 - 1 / range_factor^2
-#     #value range is 1 here
-#     std = 1.0 / range_factor
-    
-#     # Gaussian noise: create a random normal distribution that has the same size as the data to add noise to 
-#     # Genearte noise with same size as that of the data.
-#     return torch.normal(mean=mean, std=std, size=(frame_count,), device=device)
-
-# def prompts_concat(start_audio_path, end_audio_path, noise_duration, sample_rate=16000):
-#     range_factor = 4  # for gaussian noise generation
-#     start_audio_data = load_audio_mono(start_audio_path)[0]  # shape: [T]
-#     end_audio_data = load_audio_mono(end_audio_path)[0]      # shape: [T]
-#     noise_np = noise_gen_gaussian(range_factor, int(noise_duration * sample_rate))
-#     noise_data = torch.from_numpy(noise_np.astype(np.float32))  # convert to tensor
-#     concat_data = torch.cat((start_audio_data, noise_data, end_audio_data), dim=0)
-#     return concat_data.unsqueeze(0)  # shape: [1, T]
-
-
 def noise_gen_gaussian(range_factor, frame_count, device):
     mean = 0.0
     #portion of values in range = 1 - 1 / range_factor^2
