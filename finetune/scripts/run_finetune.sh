@@ -6,7 +6,7 @@
 #email results, store console logs in a .out file
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=al4624
-#SBATCH --output=run_YuE_finetune%j.out
+#SBATCH --output=run_YuE_finetune_icl%j.out
 
 rm -rf /vol/bitbucket/al4624/model_output/*
 
@@ -115,11 +115,11 @@ PER_DEVICE_EVAL_BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
 SEQ_LENGTH=8192
-TRAIN_ITERS=1139
+TRAIN_ITERS=7
 NUM_TRAIN_EPOCHS=1
 
 # Data paths (replace with your actual paths)
-DATA_PATH="74681249 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
+DATA_PATH="470456 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
 DATA_CACHE_PATH="/vol/bitbucket/al4624/cache/finetune_cache/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split

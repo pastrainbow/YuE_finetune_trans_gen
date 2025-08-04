@@ -7,6 +7,7 @@ rm -rf /vol/bitbucket/al4624/cache/finetune_cache/model_cache/*
 rm -rf /vol/bitbucket/al4624/cache/finetune_cache/hf_home_cache/*
 rm -rf /vol/bitbucket/al4624/cache/finetune_cache/xdg_cache_home/*
 
+rm -rf  /vol/bitbucket/al4624/model_output/*
 
 #preprocess dataset, update finetune script with correct parameters, then start finetuning
 bash scripts/preprocess_data.sh trans_gen icl_cot inst
