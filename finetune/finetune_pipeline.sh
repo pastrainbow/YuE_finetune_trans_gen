@@ -10,7 +10,7 @@ rm -rf /vol/bitbucket/al4624/cache/finetune_cache/xdg_cache_home/*
 rm -rf  /vol/bitbucket/al4624/model_output/*
 
 #preprocess dataset, update finetune script with correct parameters, then start finetuning
-bash scripts/preprocess_data.sh trans_gen icl_cot inst
+bash scripts/preprocess_data.sh test icl_cot inst
 bash scripts/count_tokens.sh ./example/mmap/
 sleep 5
 python core/parse_mixture.py -c example/trans_gen_data_mixture_cfg.yml > example/mixture_parse_log.txt

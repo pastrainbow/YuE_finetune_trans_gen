@@ -1,6 +1,6 @@
 #!/bin/bash
 
-rm -rf ../example/mmap/
+# rm -rf ../example/mmap/
 
 DATA_SETTING=$1
 MODE_TYPE=$2
@@ -30,6 +30,15 @@ if [ "$DATA_SETTING" == "dummy" ]; then
        NUM_QUANTIZERS=1
 elif [ "$DATA_SETTING" == "trans_gen" ]; then
        DATA_ROOT=example
+       NAME_PREFIX=trans_gen.msa.xcodec_16k
+       CODEC_TYPE=xcodec
+       ORDER=textfirst
+       DROPOUT=0.0
+       KEEP_SEQUENTIAL_SAMPLES=true
+       QUANTIZER_BEGIN_IDX=0
+       NUM_QUANTIZERS=1 #modify this according to the dataset codes
+elif [ "$DATA_SETTING" == "test" ]; then
+       DATA_ROOT=test_example
        NAME_PREFIX=trans_gen.msa.xcodec_16k
        CODEC_TYPE=xcodec
        ORDER=textfirst

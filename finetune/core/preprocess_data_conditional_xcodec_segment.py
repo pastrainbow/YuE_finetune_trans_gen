@@ -31,7 +31,7 @@ from core.datasets import indexed_dataset
 from preprocess_data_conditional_xcodec import get_file_name, check_files_exist
 from preprocess_data_conditional_xcodec import Encoder as EncoderBase
 
-DEBUG = False
+DEBUG = True
 np.random.seed(42)
 
 
@@ -361,6 +361,9 @@ class Encoder(EncoderBase):
         key = "text" # hardcode key
         ids[key] = doc_ids
         lens[key] = sentence_lens
+
+        if DEBUG: print(f"[DEBUG] Final document IDs for {data['id']}: {ids[key]}")
+        if DEBUG: print(f"[DEBUG] Final sentence lengths for {data['id']}: {lens[key]}")
 
         bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental)
         if raw_codec_mixture is not None: # Add mixture size if it was loaded
