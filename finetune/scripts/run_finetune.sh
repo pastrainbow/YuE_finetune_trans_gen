@@ -127,7 +127,7 @@ DATA_SPLIT="900,50,50"
 
 # Model configuration
 TOKENIZER_MODEL_PATH="../inference/mm_tokenizer_v0.2_hf/tokenizer.model"
-MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-icl"
+MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-cot"
 MODEL_CACHE_DIR="/vol/bitbucket/al4624/cache/finetune_cache/model_cache"
 OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
 DEEPSPEED_CONFIG=config/ds_config_zero2.json
