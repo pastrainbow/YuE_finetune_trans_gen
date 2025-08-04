@@ -1,8 +1,7 @@
 import os
 #prevent model from using lab machine cache
-os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/inference_cache/transformer_cache'
-os.environ['HF_HOME'] = '/vol/bitbucket/al4624/inference_cache/hf_home_cache'
-os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/inference_cache/xdg_cache_home'
+os.environ['HF_HOME'] = '/vol/bitbucket/al4624/cache/inference_cache/hf_home_cache'
+os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/cache/inference_cache/xdg_cache_home'
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer'))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer', 'descriptaudiocodec'))
@@ -251,14 +250,14 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
                 # audio_prompt_codec = ids_segment_interleaved[int(args.prompt_start_time*50*2): int(args.prompt_end_time*50*2)]
                 # audio_prompt_codec = audio_prompt_codec.tolist()
             elif args.use_audio_prompt:
-                #audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration, device)
-                #raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
+                audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration, device)
+                raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
                 #np.save("/homes/al4624/Documents/YuE_finetune/test_files/prompt_concat_codes.npy", raw_codes_real)
                 # print(f"[DEBUG] real raw codes: {raw_codes_real}, with shape {raw_codes_real.shape}")
 
 
-                raw_codes = np.load("/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes/078303.Instrumental.noised.npy")[0:1, :]
-                raw_codes = np.expand_dims(raw_codes, axis=0)
+                # raw_codes = np.load("/homes/al4624/Documents/YuE_finetune/finetune_testing_dataset/noised_inst_codes/078303.Instrumental.noised.npy")[0:1, :]
+                # raw_codes = np.expand_dims(raw_codes, axis=0)
                 # print(f"[DEBUG] loaded raw codes: {raw_codes}, with shape {raw_codes.shape}")
 
                 max_new_tokens = len(raw_codes[0][0])

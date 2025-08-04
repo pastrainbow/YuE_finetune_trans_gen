@@ -53,7 +53,7 @@ if [ "$MODE_TYPE" == "cot" ]; then
     rm -f $DATA_ROOT/jsonl/${NAME_PREFIX}_*.jsonl # Use -f to avoid error if files don't exist
     mkdir -p $DATA_ROOT/$MMAP_NAME
 
-    args="python core/preprocess_data_conditional_xcodec_segment.py \
+    args="python core/preprocess_data_conditional_xcodec_segment_original.py \
            --input $DATA_ROOT/$JSONL_NAME \
            --output-prefix $DATA_ROOT/$MMAP_NAME \
            --tokenizer-model $TOKENIZER_MODEL \

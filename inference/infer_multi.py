@@ -1,8 +1,7 @@
 import os
 #prevent model from using lab machine cache
-os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/inference_cache/transformer_cache'
-os.environ['HF_HOME'] = '/vol/bitbucket/al4624/inference_cache/hf_home_cache'
-os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/inference_cache/xdg_cache_home'
+os.environ['HF_HOME'] = '/vol/bitbucket/al4624/cache/inference_cache/hf_home_cache'
+os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/cache/inference_cache/xdg_cache_home'
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer'))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer', 'descriptaudiocodec'))

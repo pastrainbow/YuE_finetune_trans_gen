@@ -3,9 +3,12 @@
 #SBATCH --mail-user=al4624
 #SBATCH --output=run_YuE_infer%j.out
 
+#clear previous output
+rm -rf ../output
+
 python infer.py \
     --cuda_idx 0 \
-    --stage1_model m-a-p/YuE-s1-7B-anneal-en-icl \
+    --stage1_model /vol/bitbucket/al4624/model_output \
     --stage2_model m-a-p/YuE-s2-1B-general \
     --gen_duration 10.0 \
     --use_audio_prompt \
@@ -31,3 +34,4 @@ python infer.py \
 #     --output_dir ../output \
 #     --max_new_tokens 3000 \
 #     --repetition_penalty 1.1
+#    --stage1_model m-a-p/YuE-s1-7B-anneal-en-icl \
