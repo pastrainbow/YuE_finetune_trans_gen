@@ -25,46 +25,46 @@ logger = logging.getLogger(__name__)
 
 _GLOBAL_TOKENIZER = None
 
-class ScheduledSamplingTrainer(Trainer):
-    def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, **kwargs):
-        self.initial_prob = initial_prob
-        self.final_prob = final_prob
-        self.total_steps = total_steps
-        self.current_step = 0
-        super().__init__(*args, **kwargs)
+# class ScheduledSamplingTrainer(Trainer):
+#     def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, **kwargs):
+#         self.initial_prob = initial_prob
+#         self.final_prob = final_prob
+#         self.total_steps = total_steps
+#         self.current_step = 0
+#         super().__init__(*args, **kwargs)
 
-    def _get_teacher_forcing_prob(self):
-        """Exponential decay for teacher forcing probability."""
-        decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
-        return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
+#     def _get_teacher_forcing_prob(self):
+#         """Exponential decay for teacher forcing probability."""
+#         decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
+#         return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
 
-    def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
-        self.current_step += 1
-        teacher_prob = self._get_teacher_forcing_prob()
+#     def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
+#         self.current_step += 1
+#         teacher_prob = self._get_teacher_forcing_prob()
     
-        inputs = self._prepare_inputs(inputs)
-        input_ids = inputs["input_ids"]
-        attention_mask = inputs.get("attention_mask", None)
+#         inputs = self._prepare_inputs(inputs)
+#         input_ids = inputs["input_ids"]
+#         attention_mask = inputs.get("attention_mask", None)
     
-    	# Only perform scheduled sampling when needed
-        if teacher_prob < 1.0 and self.state.global_step > 0:
-            # First forward pass to get predictions
-            with torch.no_grad():
-                outputs = model(**inputs)
-                logits = outputs.logits.detach()
-                sampled_ids = torch.argmax(logits, dim=-1)
+#     	# Only perform scheduled sampling when needed
+#         if teacher_prob < 1.0 and self.state.global_step > 0:
+#             # First forward pass to get predictions
+#             with torch.no_grad():
+#                 outputs = model(**inputs)
+#                 logits = outputs.logits.detach()
+#                 sampled_ids = torch.argmax(logits, dim=-1)
 
-            # Create mixed inputs
-            mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
-            shifted_sampled = torch.cat([input_ids[:, :1], sampled_ids[:, :-1]], dim=1)
-            mixed_input_ids = torch.where(mask, shifted_sampled, input_ids)
+#             # Create mixed inputs
+#             mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
+#             shifted_sampled = torch.cat([input_ids[:, :1], sampled_ids[:, :-1]], dim=1)
+#             mixed_input_ids = torch.where(mask, shifted_sampled, input_ids)
         
-            # Replace input_ids with mixed version
-            inputs["input_ids"] = mixed_input_ids
+#             # Replace input_ids with mixed version
+#             inputs["input_ids"] = mixed_input_ids
         
-        # Single forward pass (either original or with mixed inputs)
-        outputs = model(**inputs)
-        return outputs.loss
+#         # Single forward pass (either original or with mixed inputs)
+#         outputs = model(**inputs)
+#         return outputs.loss
 
 def is_dataset_built_on_rank():
     # return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0
@@ -273,17 +273,27 @@ def main():
         except Exception as e:
             logger.warning(f"Failed to initialize wandb: {e}. Continuing without wandb.")
 
+    # # Create trainer
+    # trainer = ScheduledSamplingTrainer(
+    #     model=model,
+    #     tokenizer=_GLOBAL_TOKENIZER,
+    #     args=training_args,
+    #     train_dataset=train_ds,
+    #     eval_dataset=valid_ds,
+    #     data_collator=default_data_collator,
+    #     initial_prob=1.0, 
+    #     final_prob=0.5, 
+    #     total_steps=train_steps,
+    # )
+
     # Create trainer
-    trainer = ScheduledSamplingTrainer(
+    trainer = Trainer(
         model=model,
         tokenizer=_GLOBAL_TOKENIZER,
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=valid_ds,
         data_collator=default_data_collator,
-        initial_prob=1.0, 
-        final_prob=0.5, 
-        total_steps=train_steps,
     )
     
     # Start training
