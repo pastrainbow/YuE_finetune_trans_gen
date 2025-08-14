@@ -803,7 +803,7 @@ def _add_finetune_args(parser):
                        help='Number of updates steps before two checkpoint saves.')
     group.add_argument('--save-total-limit', type=int, default=100,
                        help='Limit the total amount of checkpoints.')
-    group.add_argument('--learning-rate', type=float, default=0.0005,
+    group.add_argument('--learning-rate', type=float, default=5e-5,
                        help='The initial learning rate for training.')
     group.add_argument('--weight-decay', type=float, default=0.01,
                        help='Weight decay coefficient for L2 regularization.')

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# rm -rf ../example/mmap/
+rm -rf ../example/mmap/
 
 DATA_SETTING=$1
 MODE_TYPE=$2
-TOKENIZER_MODEL=/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/inference/mm_tokenizer_v0.2_hf/tokenizer.model
+TOKENIZER_MODEL=/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/tokenizer/tokenizer.model
 AUDIO_PROMPT_MODES=($3)
 if [ -z "$3" ]; then
     AUDIO_PROMPT_MODES=('dual' 'inst' 'vocal' 'mixture')
@@ -62,7 +62,7 @@ if [ "$MODE_TYPE" == "cot" ]; then
     rm -f $DATA_ROOT/jsonl/${NAME_PREFIX}_*.jsonl # Use -f to avoid error if files don't exist
     mkdir -p $DATA_ROOT/$MMAP_NAME
 
-    args="python core/preprocess_data_conditional_xcodec_segment_original.py \
+    args="python core/preprocess_data_conditional_xcodec_segment.py \
            --input $DATA_ROOT/$JSONL_NAME \
            --output-prefix $DATA_ROOT/$MMAP_NAME \
            --tokenizer-model $TOKENIZER_MODEL \
@@ -121,7 +121,9 @@ elif [ "$MODE_TYPE" == "icl_cot" ]; then
                   --use-audio-icl \
                   --audio-prompt-mode $mode \
                   --teacher-forcing \
-                  --keep-sequential-samples
+                  --keep-sequential-samples \
+                  --ignore-vocals \
+                  --silent-codec-path /vol/bitbucket/al4624/finetune_dataset/silence/silence.npy
                   "
 
            echo "$args"

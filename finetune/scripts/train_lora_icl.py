@@ -1,8 +1,8 @@
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
 import os
 #prevent model from using lab machine cache
-os.environ['HF_HOME'] = '/vol/bitbucket/al4624/cache/finetune_cache/hf_home_cache'
-os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/cache/finetune_cache/xdg_cache_home'
+os.environ['HF_HOME'] = '/vol/bitbucket/al4624/cache/general_cache/hf_home_cache'
+os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/cache/general_cache/xdg_cache_home'
 import time
 import logging
 import torch
@@ -25,12 +25,35 @@ logger = logging.getLogger(__name__)
 
 _GLOBAL_TOKENIZER = None
 
+def find_tensor_sub_seq(batch_ids, sub_seq_ids):    
+    first_token = sub_seq_ids[0]
+    batch_size, seq_len = batch_ids.shape
+    sub_seq_len = len(sub_seq_ids)
+    positions = torch.full((batch_size,), seq_len, dtype=torch.int, device=batch_ids.device)
+    for b in range(batch_size):
+        seq = batch_ids[b]
+        candidate_positions = (seq == first_token).nonzero(as_tuple=True)[0]
+        for pos in candidate_positions:
+            if pos + sub_seq_len <= seq_len:
+                window = seq[pos:pos+sub_seq_len]
+                if torch.all(window == sub_seq_ids):
+                    positions[b] = pos
+                    break
+    return positions
+
 class ScheduledSamplingTrainer(Trainer):
     def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, **kwargs):
         self.initial_prob = initial_prob
         self.final_prob = final_prob
         self.total_steps = total_steps
         self.current_step = 0
+        #We need the reference marker tokens for teacher forcing the prompt
+        self.sor_token_ids = torch.Tensor(_GLOBAL_TOKENIZER("[start_of_reference]")["input_ids"])
+        self.eor_token_ids = torch.Tensor(_GLOBAL_TOKENIZER("[end_of_reference]")["input_ids"])
+        #We also need to teacher force the xcodec marker token, since we know this token can mess up the model 
+        self.sep_id = _GLOBAL_TOKENIZER("<xcodec>")["input_ids"][0]
+        #should just be token 32016
+        print(f"[DEBUG] sep id is {self.sep_id}")
         super().__init__(*args, **kwargs)
 
     def _get_teacher_forcing_prob(self):
@@ -41,30 +64,59 @@ class ScheduledSamplingTrainer(Trainer):
     def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
         self.current_step += 1
         teacher_prob = self._get_teacher_forcing_prob()
-    
+        
+        # Prepare inputs
         inputs = self._prepare_inputs(inputs)
         input_ids = inputs["input_ids"]
         attention_mask = inputs.get("attention_mask", None)
-    
-    	# Only perform scheduled sampling when needed
+        labels = inputs.get("labels", input_ids.clone())
+        
+        #obtain prompt mask to locate prompt tokens
+        sor_positions = find_tensor_sub_seq(input_ids, self.sor_token_ids)
+        eor_positions = find_tensor_sub_seq(input_ids, self.eor_token_ids)
+        prompt_complete_flags = (sor_positions < eor_positions).unsqueeze(1).repeat(1, input_ids.shape[1])
+        end_prompt_mask = (torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0) 
+                            <= (eor_positions + len(self.eor_token_ids) - 1).unsqueeze(1))
+        start_prompt_mask = (torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0) 
+                        >= (sor_positions).unsqueeze(1))
+        prompt_mask = torch.where(prompt_complete_flags, start_prompt_mask & end_prompt_mask, start_prompt_mask | end_prompt_mask)
+        
+        #obtain sep_id mask
+        sep_mask = input_ids == self.sep_id
+
+        teacher_force_mask = prompt_mask | sep_mask
+
+        # Forward pass with teacher forcing
+        outputs = model(**inputs)
+        logits = outputs.logits
+        
+        outputs = None
+        # Apply scheduled sampling
         if teacher_prob < 1.0 and self.state.global_step > 0:
-            # First forward pass to get predictions
+            # Sample from model predictions
             with torch.no_grad():
                 outputs = model(**inputs)
-                logits = outputs.logits.detach()
+                logits = outputs.logits
                 sampled_ids = torch.argmax(logits, dim=-1)
-
-            # Create mixed inputs
-            mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
+            #Never replace prompt tokens or sep token
+            replace_mask =  (~teacher_force_mask) & (torch.rand_like(input_ids.float()) > teacher_prob).bool()
+            # Shift right to align predictions with next tokens
             shifted_sampled = torch.cat([input_ids[:, :1], sampled_ids[:, :-1]], dim=1)
-            mixed_input_ids = torch.where(mask, shifted_sampled, input_ids)
+            input_ids = torch.where(replace_mask, shifted_sampled, input_ids)
+            # Re-run forward pass with mixed inputs
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        else:
+            outputs = model(**inputs)
         
-            # Replace input_ids with mixed version
-            inputs["input_ids"] = mixed_input_ids
+        #Mask loss for teacher force tokens
+        labels = labels.masked_fill(teacher_force_mask, -100)
+        loss = torch.nn.functional.cross_entropy(
+            outputs.logits.view(-1, outputs.logits.size(-1)),
+            labels.view(-1),
+            ignore_index=-100
+        )
         
-        # Single forward pass (either original or with mixed inputs)
-        outputs = model(**inputs)
-        return outputs.loss
+        return loss
 
 def is_dataset_built_on_rank():
     # return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0
@@ -208,8 +260,7 @@ def create_and_configure_model(args):
             torch_dtype=args.params_dtype,
             cache_dir=args.cache_dir
         )
-        model.gradient_checkpointing_enable()
-        print(f"[DEBUG] Model gradient checkpointing enabled: {model.is_gradient_checkpointing}")
+        
         logger.info(f"Configuring LoRA with r={args.lora_r}, alpha={args.lora_alpha}")
         lora_config = LoraConfig(
             r=args.lora_r,
@@ -246,10 +297,10 @@ def main():
     
     # Build datasets
     train_ds, valid_ds, test_ds = build_train_valid_test_datasets(args)
-
+    
     train_steps = args.train_iters * args.global_batch_size // (args.per_device_train_batch_size * args.gradient_accumulation_steps) * args.num_train_epochs
     print(f"[DEBUG] Total training steps: {train_steps}")
-    
+
     # Create and configure model
     model = create_and_configure_model(args)
 
@@ -272,6 +323,7 @@ def main():
             )
         except Exception as e:
             logger.warning(f"Failed to initialize wandb: {e}. Continuing without wandb.")
+
 
     # Create trainer
     trainer = ScheduledSamplingTrainer(

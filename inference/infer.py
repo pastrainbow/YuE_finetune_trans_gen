@@ -86,6 +86,15 @@ seed_everything(args.seed)
 # load tokenizer and model
 device = torch.device(f"cuda:{cuda_idx}" if torch.cuda.is_available() else "cpu")
 mmtokenizer = _MMSentencePieceTokenizer("./mm_tokenizer_v0.2_hf/tokenizer.model")
+
+print(f"[DEBUG] EOS token id: {mmtokenizer.eoa}, PAD token id: {mmtokenizer.eoa}, BOS token id: {mmtokenizer.bos}, SOA token id: {mmtokenizer.soa}, EOA token id: {mmtokenizer.eoa}")
+
+token = mmtokenizer.detokenize([32016])
+print(f"[DEBUG] 32016: {token}")
+
+token = mmtokenizer.detokenize([45798])
+print(f"[DEBUG] 45798: {token}")
+
 model = AutoModelForCausalLM.from_pretrained(
     stage1_model, 
     torch_dtype=torch.bfloat16,
@@ -100,6 +109,8 @@ if torch.__version__ >= "2.0.0":
     model = torch.compile(model)
 
 codectool = CodecManipulator("xcodec", 0, 1)
+print(f"[DEBUG] Sep ids: {codectool.sep_ids}")
+
 codectool_stage2 = CodecManipulator("xcodec", 0, 8)
 model_config = OmegaConf.load(args.basic_model_config)
 codec_model = eval(model_config.generator.name)(**model_config.generator.config).to(device)
@@ -110,7 +121,7 @@ codec_model.eval()
 
 class BlockTokenRangeProcessor(LogitsProcessor):
     def __init__(self, start_id, end_id):
-        self.blocked_token_ids = list(range(start_id, end_id))
+        self.blocked_token_ids = list(range(start_id, end_id + 1))
 
     def __call__(self, input_ids, scores):
         scores[:, self.blocked_token_ids] = -float("inf")
@@ -199,6 +210,7 @@ full_lyrics = "\n".join(lyrics)
 instruction = gen_ICL_trans_gen_instruction(args.start_audio_prompt_path, args.gen_duration)
 prompt_texts = [f"{instruction}\n[Genre] {genres}\n{full_lyrics}"]
 prompt_texts += lyrics
+print(f"[DEBUG] Prompt texts: {prompt_texts}")
 
 random_id = uuid.uuid4()
 output_seq = None
@@ -209,10 +221,16 @@ repetition_penalty = args.repetition_penalty
 # special tokens
 start_of_segment = mmtokenizer.tokenize('[start_of_segment]')
 end_of_segment = mmtokenizer.tokenize('[end_of_segment]')
+
+print(f"[DEBUG] Start of segment token ids: {start_of_segment}")
+print(f"[DEBUG] End of segment token ids: {end_of_segment}" )
+
+
 # Format text prompt
 run_n_segments = min(args.run_n_segments+1, len(lyrics))
 for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference...")):
     section_text = p.replace('[start_of_segment]', '').replace('[end_of_segment]', '')
+    print(f"[DEBUG] Section {i} text: {section_text}")
     guidance_scale = 1.5 if i <=1 else 1.2
     if i==0:
         continue
@@ -252,10 +270,14 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
         else:
             head_id = mmtokenizer.tokenize(prompt_texts[0])
         prompt_ids = head_id + start_of_segment + mmtokenizer.tokenize(section_text) + [mmtokenizer.soa] + codectool.sep_ids
+        # prompt_ids = head_id + start_of_segment + mmtokenizer.tokenize(section_text) + [mmtokenizer.soa] + codectool.sep_ids + [45777] #TESTING, REMEMBER TO REMOVE THIS LINE!!!!!!!!!!!!!
     else:
         prompt_ids = end_of_segment + start_of_segment + mmtokenizer.tokenize(section_text) + [mmtokenizer.soa] + codectool.sep_ids
 
-    prompt_ids = torch.as_tensor(prompt_ids).unsqueeze(0).to(device) 
+    prompt_ids = torch.as_tensor(prompt_ids).unsqueeze(0).to(device)
+    torch.set_printoptions(threshold=float('inf'), edgeitems=None, linewidth=200)
+    print(f"[DEBUG] prompt ids shape: {prompt_ids.shape}")
+    print(f"[DEBUG] prompt ids content: {prompt_ids}")
     input_ids = torch.cat([raw_output, prompt_ids], dim=1) if i > 1 else prompt_ids
     # Use window slicing in case output sequence exceeds the context of model
     max_context = 16384-max_new_tokens-1
@@ -284,12 +306,17 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
     else:
         raw_output = output_seq
 
+torch.set_printoptions(threshold=float('inf'), edgeitems=None, linewidth=200)
+np.set_printoptions(threshold=np.inf)
+
 # save raw output and check sanity
 ids = raw_output[0].cpu().numpy()
 soa_idx = np.where(ids == mmtokenizer.soa)[0].tolist()
 eoa_idx = np.where(ids == mmtokenizer.eoa)[0].tolist()
 if len(soa_idx)!=len(eoa_idx):
     raise ValueError(f'invalid pairs of soa and eoa, Num of soa: {len(soa_idx)}, Num of eoa: {len(eoa_idx)}')
+
+print(f"[DEBUG] raw output ids: {ids}")
 
 vocals = []
 instrumentals = []
@@ -299,8 +326,9 @@ for i in range(range_begin, len(soa_idx)):
     if codec_ids[0] == 32016:
         codec_ids = codec_ids[1:]
     codec_ids = codec_ids[:2 * (codec_ids.shape[0] // 2)]
-    print(f"[DEBUG] codec ids: {codec_ids}")
-    print(f"[DEBUG] codec shape: {codec_ids.shape[0]}")
+    # codec_ids[codec_ids == 32016] = 45678
+    # print(f"[DEBUG] codec ids: {codec_ids}")
+    # print(f"[DEBUG] codec shape: {codec_ids.shape[0]}")
     vocals_ids = codectool.ids2npy(rearrange(codec_ids,"(n b) -> b n", b=2)[0])
     # vocals_ids = codectool.ids2npy(rearrange(codec_ids,"(n b) -> b n", b=2)[1])
     vocals.append(vocals_ids)

@@ -167,3 +167,6 @@ finetune/wandb
 *.bin
 *.idx
 *.out
+
+# model files
+.ckpt

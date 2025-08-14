@@ -1,8 +1,5 @@
 [beginning]
 
-
 [middle]
 
-
 [end]
-

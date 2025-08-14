@@ -31,9 +31,20 @@ from core.datasets import indexed_dataset
 from preprocess_data_conditional_xcodec import get_file_name, check_files_exist
 from preprocess_data_conditional_xcodec import Encoder as EncoderBase
 
-DEBUG = True
+DEBUG = False
 np.random.seed(42)
 
+
+def get_max_item_freq(np_arr):
+    # Sort the array
+    sorted_arr = np.sort(np_arr)
+    # Find where the value changes
+    changes = np.diff(sorted_arr) != 0
+    # Get run lengths of identical values
+    run_lengths = np.diff(np.concatenate(([0], np.where(changes)[0] + 1, [len(np_arr)])))
+    # Get max frequency
+    max_frequency = run_lengths.max()
+    return max_frequency
 
 def gen_ICL_trans_gen_instruction(data):
     middle = data['splitted_lyrics']['segmented_lyrics'][1]
@@ -94,13 +105,25 @@ class Encoder(EncoderBase):
         segmented_lyrics = data['splitted_lyrics']['segmented_lyrics']
 
         try:
-            raw_codec_vocals = np.load(data['vocals_codec'])[0:1, :]
+            raw_codec_vocals = None
+            if (self.args.ignore_vocals and self.args.silent_codec_path is not None):
+                #silent codec is 30 seconds, with only bottom level codebook for now
+                raw_codec_vocals = np.load(self.args.silent_codec_path)[0:1, :]
+            else:
+                raw_codec_vocals = np.load(data['vocals_codec'])[0:1, :]
             raw_codec_instrumental = np.load(data['instrumental_codec'])[0:1, :]
             raw_codec_noised_instrumental = np.load(data['noised_instrumental_codec'])[0:1, :]
             if DEBUG:
                 print(f"[DEBUG] Raw vocals codec: {raw_codec_vocals}")
                 print(f"[DEBUG] Raw inst codec: {raw_codec_instrumental}")
                 print(f"[DEBUG] Raw noised inst codec: {raw_codec_noised_instrumental}")
+
+            #[Optional] filter out instrumentla sequences with dominating token
+            token_portion_threshold = 0.1
+            if get_max_item_freq(raw_codec_instrumental[0]) > token_portion_threshold * raw_codec_instrumental.shape[1]:
+                print(f"Warning: Skipping {data['id']} due to dominating token in instrumental codec.")
+                return {}, {}, len(json_line)
+
             # Load mixture codec only if needed for ICL prompt or future use
             raw_codec_mixture = None
             if self.args.use_audio_icl and self.args.audio_prompt_mode == "mixture":
@@ -127,7 +150,7 @@ class Encoder(EncoderBase):
         # Handle shape mismatch gracefully
         if raw_codec_vocals.shape != raw_codec_instrumental.shape:
             diff = abs(raw_codec_vocals.shape[-1] - raw_codec_instrumental.shape[-1])
-            if diff <= 10: # Allow small difference
+            if diff <= 10 or self.args.ignore_vocals: # Allow small difference, or when vocals are ignored
                 min_len = min(raw_codec_vocals.shape[-1], raw_codec_instrumental.shape[-1])
                 raw_codec_vocals = raw_codec_vocals[:, :min_len]
                 raw_codec_instrumental = raw_codec_instrumental[:, :min_len]
@@ -140,14 +163,14 @@ class Encoder(EncoderBase):
                 return {}, {}, bytes_processed
 
         # Also check mixture codec shape if loaded
-        if raw_codec_mixture is not None and raw_codec_mixture.shape[1] != raw_codec_vocals.shape[1]:
+        if raw_codec_mixture is not None and raw_codec_mixture.shape[1] != raw_codec_instrumental.shape[1]:
              # Attempt to trim mixture like vocals/instrumental if difference is small
-             diff_mix = abs(raw_codec_mixture.shape[-1] - raw_codec_vocals.shape[-1])
+             diff_mix = abs(raw_codec_mixture.shape[-1] - raw_codec_instrumental.shape[-1])
              if diff_mix <= 10:
-                 raw_codec_mixture = raw_codec_mixture[:, :raw_codec_vocals.shape[1]]
+                 raw_codec_mixture = raw_codec_mixture[:, :raw_codec_instrumental.shape[1]]
                  if DEBUG: print(f"Adjusted mixture codec shape for {data['id']} to match vocals/instrumental.")
              else:
-                 print(f"Warning: Mixture codec shape {raw_codec_mixture.shape} mismatch with vocals/instrumental {raw_codec_vocals.shape} for {data['id']} (ICL-CoT). Skipping.")
+                 print(f"Warning: Mixture codec shape {raw_codec_mixture.shape} mismatch with vocals/instrumental {raw_codec_instrumental.shape} for {data['id']} (ICL-CoT). Skipping.")
                  bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental) + get_size_in_bytes(raw_codec_mixture)
                  return {}, {}, bytes_processed
 
@@ -166,7 +189,7 @@ class Encoder(EncoderBase):
         # Relaxed fps check
         if fps > 51 or fps < 49:
             mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
-            if DEBUG: print(f"fps={fps} is invalid for {data['id']} {mode_str}, skipping...")
+            print(f"fps={fps} is invalid for {data['id']} {mode_str}, skipping...")
             # Calculate bytes processed before returning
             bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental)
             if raw_codec_mixture is not None: bytes_processed += get_size_in_bytes(raw_codec_mixture)
@@ -261,26 +284,32 @@ class Encoder(EncoderBase):
 
             if DEBUG: print(f"[DEBUG] Processing segment with line content {line_content}")
 
+            segment_valid = True
+
             # Basic validation of segment data
             if duration is None or frame_start is None or frame_end is None or line_content is None:
                 if DEBUG: print(f"Skipping segment due to missing keys: {segment} in {data['id']}")
-                continue
+                segment_valid = False
             # Frame indices validity already checked for the whole song's fps calculation
             if not (0 <= frame_start < frame_end <= raw_codec_vocals.shape[1]):
-                 if DEBUG: print(f"Invalid frame indices for segment in {data['id']}: start={frame_start}, end={frame_end}, total={raw_codec_vocals.shape[1]}. Skipping.")
-                 continue
+                if DEBUG: print(f"Invalid frame indices for segment in {data['id']}: start={frame_start}, end={frame_end}, total={raw_codec_vocals.shape[1]}. Skipping.")
+                segment_valid = False
             if frame_end - frame_start <= 0:
-                 if DEBUG: print(f"Segment frame length is zero or negative in {data['id']}: {frame_end - frame_start}. Skipping.")
-                 continue
+                if DEBUG: print(f"Segment frame length is zero or negative in {data['id']}: {frame_end - frame_start}. Skipping.")
+                segment_valid = False
             # Minimum duration check (e.g., > 1 sec for target, or based on fps)
             min_target_segment_duration_sec = 1.0
             if self.args.use_audio_icl and duration < min_target_segment_duration_sec:
-                 if DEBUG: print(f"Skipping target segment in {data['id']} (ICL) because duration {duration} < {min_target_segment_duration_sec}s")
-                 continue
+                if DEBUG: print(f"Skipping target segment in {data['id']} (ICL) because duration {duration} < {min_target_segment_duration_sec}s")
+                segment_valid = False
             # Check based on fps if not ICL (ensure at least 1 second)
             elif not self.args.use_audio_icl and frame_end - frame_start < fps:
                 if DEBUG: print(f"Segment frame too short in {data['id']}: length={frame_end - frame_start} (< {fps}), skipping...")
-                continue
+                segment_valid = False
+            if not segment_valid:
+                print(f"Warninig: {data['id']} has an invalid segment. Skipping.")
+                bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_noised_instrumental) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental)
+                return {}, {}, bytes_processed
 
 
             raw_codec_vocals_segment = raw_codec_vocals[:, frame_start:frame_end]
@@ -314,7 +343,7 @@ class Encoder(EncoderBase):
                      print(f"Warning: Mismatch target vocal/inst IDs ({len(vocals_ids_seg)}/{len(instrumental_ids_seg)}) for {data['id']} {mode_str}. Skipping segment.")
                      continue
                 if len(vocals_ids_seg) == 0: # Skip empty segments
-                    if DEBUG: print(f"Skipping segment in {data['id']} because resulting codec IDs are empty.")
+                    print(f"Skipping segment in {data['id']} because resulting codec IDs are empty.")
                     continue
 
                 ids_segment_interleaved = rearrange([np.array(vocals_ids_seg), np.array(instrumental_ids_seg)], 'b n -> (n b)')
@@ -359,10 +388,12 @@ class Encoder(EncoderBase):
 
 
         key = "text" # hardcode key
+        doc_ids = [int(x) for x in doc_ids] # Ensure all IDs are integers
         ids[key] = doc_ids
         lens[key] = sentence_lens
 
         if DEBUG: print(f"[DEBUG] Final document IDs for {data['id']}: {ids[key]}")
+        if DEBUG: print(f"[DEBUG] Final sentence lengths for {data['id']}: {len(ids[key])}")
         if DEBUG: print(f"[DEBUG] Final sentence lengths for {data['id']}: {lens[key]}")
 
         bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental)
@@ -460,6 +491,18 @@ class Partition(object):
         encoder = Encoder(self.args)
         try:
             tokenizer = _MMSentencePieceTokenizer(self.args.tokenizer_model, vocab_extra_ids=self.args.vocab_extra_ids)
+            ids = [11221, 263, 4696, 5702, 988, 278, 7256, 10768, 313, 3166, 5993, 29871, 29945, 29900, 29900, 304, 
+                   5993, 29871, 29896, 29900, 29900, 29900, 29897, 338, 1034, 14214, 491, 11462, 29892, 5706, 263, 
+                   5941, 1873, 310, 278, 5702, 988, 278, 7256, 10768, 7087, 278, 3114, 29892, 11395, 362, 29892, 322, 
+                   18178, 29265, 310, 278, 18830, 24611, 313, 11083, 322, 1156, 278, 11462, 511, 4803, 278, 6763, 322, 1095, 
+                   24611, 408, 9282, 304, 337, 11433, 278, 4567, 470, 5625, 4063, 4004, 10597, 368, 29892, 5662, 3864, 409, 314, 2222, 
+                   9636, 3133, 537, 29889, 13, 29961, 15462, 276, 29962, 8198, 29899, 2481, 847, 17939, 13, 29961, 463, 1076, 29962, 13, 13, 13, 
+                   29961, 17662, 29962, 13, 13, 13, 29961, 355, 29962, 13, 13, 518, 2962, 29918, 974, 29918, 5679, 29962, 32001, 32016, 45824, 46025, 
+                   45669, 45387, 46053, 46189, 45748, 45387, 46221, 46025, 45872, 45387, 45872, 45669, 46025, 45822, 45748, 45874, 46263, 46095, 45874, 
+                   46025, 45362, 46189, 46304, 46025, 45387, 45872, 46304, 45362, 45362, 46269, 45872, 45422, 45406, 46263, 45422, 45797, 45874, 46095, 46111, 
+                   45874, 45874, 46304, 45630, 45387, 45387, 46095, 46132, 46189, 46304, 45822, 46269, 45669, 45872, 45782, 46095, 45761, 45748, 45406, 46304, 
+                   46025, 46025, 45748, 45362, 46095, 45387, 46111, 45354, 46095, 46304, 46095, 46025, 45782, 45406, 46304, 46304, 45362]
+            if DEBUG: print(f"[DEBUG] sample ids decoded: {tokenizer.detokenize(ids)}")
             # Initialize encoder (loads tokenizer, codectool etc.)
             encoder.initializer()
             # Pass tokenizer explicitly if not done in initializer
@@ -625,6 +668,10 @@ def get_args():
                        help='Split documents into sentences (requires NLTK).')
     group.add_argument('--keep-newlines', action='store_true',
                        help='Keep newlines between sentences when splitting (currently not implemented in EncoderBase.split).')
+    group.add_argument('--ignore-vocals', action='store_true',
+                       help='Ignore vocal codecs, and instead use 30-second silent codec sequences for vocals input.')
+    group.add_argument('--silent-codec-path', type=str, default=None,
+                       help='Path to a 30-second silent codec .npy file (if --ignore-vocals is used).')
 
     group = parser.add_argument_group(title='tokenizer')
     group.add_argument('--tokenizer-type', type=str, required=True, default='MMSentencePieceTokenizer',
@@ -821,7 +868,7 @@ def main():
                               partitioned_input_files[target_partition_index].write(line)
                               line_count += 1
                     processed_files_count += 1
-                    print(f"Finished reading {in_file_name}. Total lines distributed so far: {line_count}")
+                    print(f"Finished reading {in_file_name}. Total lines /homes/al4624/Documentsdistributed so far: {line_count}")
 
             except Exception as e:
                  print(f"Error distributing lines to partitions: {e}")

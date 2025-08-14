@@ -1,9 +1,9 @@
 import os
 import sys
 import argparse
-os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/transformer_cache'
-os.environ['HF_HOME'] = '/vol/bitbucket/al4624/hf_home_cache'
-os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/xdg_cache_home'
+os.environ['TRANSFORMERS_CACHE'] = '/vol/bitbucket/al4624/cache/general_cache/transformer_cache'
+os.environ['HF_HOME'] = '/vol/bitbucket/al4624/cache/general_cache/hf_home_cache'
+os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/cache/general_cache/xdg_cache_home'
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer'))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'xcodec_mini_infer', 'descriptaudiocodec'))
 from models.soundstream_hubert_new import SoundStream
@@ -131,9 +131,13 @@ sep_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
 sep_track_paths = [str(file) for file in Path(sep_track_dir_path).glob('*.mp3') if file.is_file()]
 num_sep_track = len(sep_track_paths)
 
-mixture_track_dir_path_root = "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/"
-mixture_track_paths = [str(file) for file in Path(mixture_track_dir_path_root).rglob('*.mp3') if file.is_file()]
-mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_mixture_codes"
+# mixture_track_dir_path_root = "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/"
+# mixture_track_paths = [str(file) for file in Path(mixture_track_dir_path_root).rglob('*.mp3') if file.is_file()]
+# mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_mixture_codes"
+
+mixture_track_dir_path_root = "/homes/al4624/Documents"
+mixture_track_paths = [str(file) for file in Path(mixture_track_dir_path_root).glob('*.mp3') if file.is_file()]
+mixture_code_dir_path = "/homes/al4624/Documents"
 
 mixture_track_dir_paths = [ "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.1",
                             "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.3",
