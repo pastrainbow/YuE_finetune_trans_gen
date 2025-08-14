@@ -95,6 +95,12 @@ print(f"[DEBUG] 32016: {token}")
 token = mmtokenizer.detokenize([45798])
 print(f"[DEBUG] 45798: {token}")
 
+eor =  mmtokenizer.tokenize("[end_of_reference]")
+print(f"[DEBUG] EOR: {eor}")
+
+sor =  mmtokenizer.tokenize("[start_of_reference]")
+print(f"[DEBUG] SOR: {sor}")
+
 model = AutoModelForCausalLM.from_pretrained(
     stage1_model, 
     torch_dtype=torch.bfloat16,

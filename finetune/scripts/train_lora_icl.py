@@ -3,6 +3,7 @@ import os
 #prevent model from using lab machine cache
 os.environ['HF_HOME'] = '/vol/bitbucket/al4624/cache/general_cache/hf_home_cache'
 os.environ['XDG_CACHE_HOME'] = '/vol/bitbucket/al4624/cache/general_cache/xdg_cache_home'
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import time
 import logging
 import torch
@@ -42,41 +43,46 @@ def find_tensor_sub_seq(batch_ids, sub_seq_ids):
     return positions
 
 class ScheduledSamplingTrainer(Trainer):
-    def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, **kwargs):
-        self.initial_prob = initial_prob
-        self.final_prob = final_prob
-        self.total_steps = total_steps
-        self.current_step = 0
-        #We need the reference marker tokens for teacher forcing the prompt
-        self.sor_token_ids = torch.Tensor(_GLOBAL_TOKENIZER("[start_of_reference]")["input_ids"])
-        self.eor_token_ids = torch.Tensor(_GLOBAL_TOKENIZER("[end_of_reference]")["input_ids"])
+    def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, sor_token_ids=None, eor_token_ids=None, sep_id=69, **kwargs):
+        # self.initial_prob = initial_prob
+        # self.final_prob = final_prob
+        # self.total_steps = total_steps
+        # self.current_step = 0
+        self.sor_token_ids = sor_token_ids
+        self.eor_token_ids = eor_token_ids
         #We also need to teacher force the xcodec marker token, since we know this token can mess up the model 
-        self.sep_id = _GLOBAL_TOKENIZER("<xcodec>")["input_ids"][0]
+        self.sep_id = sep_id
         #should just be token 32016
         print(f"[DEBUG] sep id is {self.sep_id}")
+        print(f"[DEBUG] sor tokens are {self.sor_token_ids}")
+        print(f"[DEBUG] eor tokens are {self.eor_token_ids}")
         super().__init__(*args, **kwargs)
 
-    def _get_teacher_forcing_prob(self):
-        """Exponential decay for teacher forcing probability."""
-        decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
-        return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
+    # def _get_teacher_forcing_prob(self):
+    #     """Exponential decay for teacher forcing probability."""
+    #     decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
+    #     return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
 
     def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
-        self.current_step += 1
-        teacher_prob = self._get_teacher_forcing_prob()
+        # self.current_step += 1
+        # teacher_prob = self._get_teacher_forcing_prob()
         
+
         # Prepare inputs
         inputs = self._prepare_inputs(inputs)
         input_ids = inputs["input_ids"]
-        attention_mask = inputs.get("attention_mask", None)
+        # attention_mask = inputs.get("attention_mask", None)
         labels = inputs.get("labels", input_ids.clone())
         
+        sor_ids_tensor = torch.tensor(self.sor_token_ids, dtype=torch.int, device=input_ids.device)
+        eor_ids_tensor = torch.tensor(self.eor_token_ids, dtype=torch.int, device=input_ids.device)
+
         #obtain prompt mask to locate prompt tokens
-        sor_positions = find_tensor_sub_seq(input_ids, self.sor_token_ids)
-        eor_positions = find_tensor_sub_seq(input_ids, self.eor_token_ids)
+        sor_positions = find_tensor_sub_seq(input_ids, sor_ids_tensor)
+        eor_positions = find_tensor_sub_seq(input_ids, eor_ids_tensor)
         prompt_complete_flags = (sor_positions < eor_positions).unsqueeze(1).repeat(1, input_ids.shape[1])
         end_prompt_mask = (torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0) 
-                            <= (eor_positions + len(self.eor_token_ids) - 1).unsqueeze(1))
+                            <= (eor_positions + len(eor_ids_tensor) - 1).unsqueeze(1))
         start_prompt_mask = (torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0) 
                         >= (sor_positions).unsqueeze(1))
         prompt_mask = torch.where(prompt_complete_flags, start_prompt_mask & end_prompt_mask, start_prompt_mask | end_prompt_mask)
@@ -88,25 +94,25 @@ class ScheduledSamplingTrainer(Trainer):
 
         # Forward pass with teacher forcing
         outputs = model(**inputs)
-        logits = outputs.logits
+        # logits = outputs.logits
         
-        outputs = None
-        # Apply scheduled sampling
-        if teacher_prob < 1.0 and self.state.global_step > 0:
-            # Sample from model predictions
-            with torch.no_grad():
-                outputs = model(**inputs)
-                logits = outputs.logits
-                sampled_ids = torch.argmax(logits, dim=-1)
-            #Never replace prompt tokens or sep token
-            replace_mask =  (~teacher_force_mask) & (torch.rand_like(input_ids.float()) > teacher_prob).bool()
-            # Shift right to align predictions with next tokens
-            shifted_sampled = torch.cat([input_ids[:, :1], sampled_ids[:, :-1]], dim=1)
-            input_ids = torch.where(replace_mask, shifted_sampled, input_ids)
-            # Re-run forward pass with mixed inputs
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        else:
-            outputs = model(**inputs)
+        # outputs = None
+        # # Apply scheduled sampling
+        # if teacher_prob < 1.0 and self.state.global_step > 0:
+        #     # Sample from model predictions
+        #     with torch.no_grad():
+        #         outputs = model(**inputs)
+        #         logits = outputs.logits
+        #         sampled_ids = torch.argmax(logits, dim=-1)
+        #     #Never replace prompt tokens or sep token
+        #     replace_mask =  (~teacher_force_mask) & (torch.rand_like(input_ids.float()) > teacher_prob).bool()
+        #     # Shift right to align predictions with next tokens
+        #     shifted_sampled = torch.cat([input_ids[:, :1], sampled_ids[:, :-1]], dim=1)
+        #     input_ids = torch.where(replace_mask, shifted_sampled, input_ids)
+        #     # Re-run forward pass with mixed inputs
+        #     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        # else:
+        #     outputs = model(**inputs)
         
         #Mask loss for teacher force tokens
         labels = labels.masked_fill(teacher_force_mask, -100)
@@ -150,6 +156,9 @@ def core_gpt_dataset_config_from_args(args):
 def _build_tokenizer(args):
     """Initialize tokenizer."""
     global _GLOBAL_TOKENIZER
+    global _SOR_IDS
+    global _EOR_IDS
+    global _SEP_ID
     logger.info(f"Loading tokenizer from {args.model_name_or_path}")
     model_max_length = 8192
     _GLOBAL_TOKENIZER = AutoTokenizer.from_pretrained(
@@ -161,6 +170,11 @@ def _build_tokenizer(args):
     print(f"[DEBUG]: Sample ids decoded: {_GLOBAL_TOKENIZER.decode(ids)}")
     print(f"[DEBUG] 32016: {_GLOBAL_TOKENIZER.convert_ids_to_tokens([32016])}")
     print(f"[DEBUG] 45798: {_GLOBAL_TOKENIZER.convert_ids_to_tokens([45798])}")
+
+    _SOR_IDS=_GLOBAL_TOKENIZER.encode('[start_of_reference]', add_special_tokens=False)
+    _EOR_IDS=_GLOBAL_TOKENIZER.encode('[end_of_reference]', add_special_tokens=False)
+    _SEP_ID=_GLOBAL_TOKENIZER.convert_tokens_to_ids(['<xcodec>'])[0]
+
     return _GLOBAL_TOKENIZER
 
 import random
@@ -294,7 +308,7 @@ def main():
     
     # Build tokenizer
     _build_tokenizer(args)
-    
+
     # Build datasets
     train_ds, valid_ds, test_ds = build_train_valid_test_datasets(args)
     
@@ -325,6 +339,7 @@ def main():
             logger.warning(f"Failed to initialize wandb: {e}. Continuing without wandb.")
 
 
+
     # Create trainer
     trainer = ScheduledSamplingTrainer(
         model=model,
@@ -336,6 +351,9 @@ def main():
         initial_prob=1.0, 
         final_prob=0.5, 
         total_steps=train_steps,
+        sor_token_ids=_SOR_IDS,
+        eor_token_ids=_EOR_IDS,
+        sep_id=_SEP_ID,
     )
     
     # Start training
