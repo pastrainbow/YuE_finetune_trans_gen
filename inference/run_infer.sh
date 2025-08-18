@@ -6,12 +6,12 @@
 #clear previous output
 rm -rf ../finetune_output
 
-# rm -rf /vol/bitbucket/al4624/cache/inference_cache/hf_home_cache/*
-# rm -rf /vol/bitbucket/al4624/cache/inference_cache/xdg_cache_home/*
+rm -rf /vol/bitbucket/al4624/cache/inference_cache/hf_home_cache/*
+rm -rf /vol/bitbucket/al4624/cache/inference_cache/xdg_cache_home/*
 
 python infer.py \
     --cuda_idx 0 \
-    --stage1_model m-a-p/YuE-s1-7B-anneal-en-icl \
+    --stage1_model /vol/bitbucket/al4624/model_output \
     --stage2_model m-a-p/YuE-s2-1B-general \
     --gen_duration 10.0 \
     --use_audio_prompt \
@@ -22,7 +22,7 @@ python infer.py \
     --run_n_segments 2 \
     --stage2_batch_size 4 \
     --output_dir ../finetune_output \
-    --repetition_penalty 1.0
+    --repetition_penalty 1.1
 
 # python infer_original.py \
 #     --cuda_idx 0 \
