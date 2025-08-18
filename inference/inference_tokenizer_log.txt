@@ -1,3 +1,0 @@
-[DEBUG] EOS token id: 32002, PAD token id: 32002, BOS token id: 1, SOA token id: 32001, EOA token id: 32002
-[DEBUG] 32016: <xcodec>
-[DEBUG] 45798: <xcodec/0/464>

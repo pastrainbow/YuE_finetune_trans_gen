@@ -1,6 +1,6 @@
 TOKEN_COUNT_LOG_DIR: ./count_token_logs
-GLOBAL_BATCH_SIZE: 8
-SEQ_LEN: 4096
+GLOBAL_BATCH_SIZE: 1
+SEQ_LEN: 2048
 
 1_ROUND:
   - ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document.bin

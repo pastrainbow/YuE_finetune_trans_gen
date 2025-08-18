@@ -7,6 +7,6 @@
 13270614 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document 
 
 [CRITICAL] TRAIN_ITERS **(copy to the training script)**:
-1619.947998046875
+6479.7919921875
 
 [INFO] Total token count: 0.013B
