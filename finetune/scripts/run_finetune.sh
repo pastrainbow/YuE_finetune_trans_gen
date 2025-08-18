@@ -132,7 +132,7 @@ MODEL_CACHE_DIR="/vol/bitbucket/al4624/cache/finetune_cache/model_cache"
 OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
 DEEPSPEED_CONFIG=config/ds_config_zero2.json
 
-LEARNING_RATE=3e-5
+LEARNING_RATE=3e-6
 LR_SCHEDULER_TYPE="cosine"
 WARMUP_RATIO=0.05
 WEIGHT_DECAY=0.01

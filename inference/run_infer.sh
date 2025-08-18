@@ -22,7 +22,7 @@ python infer.py \
     --run_n_segments 2 \
     --stage2_batch_size 4 \
     --output_dir ../finetune_output \
-    --repetition_penalty 1.1
+    --repetition_penalty 2.0
 
 # python infer_original.py \
 #     --cuda_idx 0 \

@@ -221,7 +221,7 @@ print(f"[DEBUG] Prompt texts: {prompt_texts}")
 random_id = uuid.uuid4()
 output_seq = None
 # Here is suggested decoding config
-top_p = 0.93
+top_p = 0.9
 temperature = 1.0
 repetition_penalty = args.repetition_penalty
 # special tokens

@@ -19,52 +19,55 @@ from peft import LoraConfig, get_peft_model
 from core.arguments import parse_args
 from core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
 from core.datasets.gpt_dataset import GPTDatasetConfig, GPTDataset
+from torch.cuda.amp import autocast
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 _GLOBAL_TOKENIZER = None
 
-# class ScheduledSamplingTrainer(Trainer):
-#     def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, **kwargs):
-#         self.initial_prob = initial_prob
-#         self.final_prob = final_prob
-#         self.total_steps = total_steps
-#         self.current_step = 0
-#         super().__init__(*args, **kwargs)
+class ScheduledSamplingTrainer(Trainer):
+    def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, **kwargs):
+        self.initial_prob = initial_prob
+        self.final_prob = final_prob
+        self.total_steps = total_steps
+        self.current_step = 0
+        super().__init__(*args, **kwargs)
 
-#     def _get_teacher_forcing_prob(self):
-#         """Exponential decay for teacher forcing probability."""
-#         decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
-#         return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
+    def _get_teacher_forcing_prob(self):
+        """Exponential decay for teacher forcing probability."""
+        decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
+        return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
 
-#     def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
-#         self.current_step += 1
-#         teacher_prob = self._get_teacher_forcing_prob()
+    def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
+        self.current_step += 1
+        teacher_prob = self._get_teacher_forcing_prob()
     
-#         inputs = self._prepare_inputs(inputs)
-#         input_ids = inputs["input_ids"]
-#         attention_mask = inputs.get("attention_mask", None)
+        inputs = self._prepare_inputs(inputs)
+        input_ids = inputs["input_ids"]
     
-#     	# Only perform scheduled sampling when needed
-#         if teacher_prob < 1.0 and self.state.global_step > 0:
-#             # First forward pass to get predictions
-#             with torch.no_grad():
-#                 outputs = model(**inputs)
-#                 logits = outputs.logits.detach()
-#                 sampled_ids = torch.argmax(logits, dim=-1)
+    	# Only perform scheduled sampling when needed
+        if teacher_prob < 1.0 and self.state.global_step > 0:
+            # First forward pass to get predictions
+            # use bf16
+            with torch.no_grad(), autocast(device_type="cuda", dtype=torch.bfloat16):
+                outputs = model(**inputs)
+                sampled_ids = outputs.logits.argmax(dim=-1).to(torch.int32)
+                del outputs
+                torch.cuda.empty_cache()
 
-#             # Create mixed inputs
-#             mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
-#             shifted_sampled = torch.cat([input_ids[:, :1], sampled_ids[:, :-1]], dim=1)
-#             mixed_input_ids = torch.where(mask, shifted_sampled, input_ids)
+            # Create mixed inputs
+            mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
+            shifted_sampled = input_ids.clone()
+            shifted_sampled[:, 1:] = sampled_ids[:, :-1]
+            mixed_input_ids = torch.where(mask, shifted_sampled, input_ids)
         
-#             # Replace input_ids with mixed version
-#             inputs["input_ids"] = mixed_input_ids
+            # Replace input_ids with mixed version
+            inputs["input_ids"] = mixed_input_ids
         
-#         # Single forward pass (either original or with mixed inputs)
-#         outputs = model(**inputs)
-#         return outputs.loss
+        # Single forward pass (either original or with mixed inputs)
+        outputs = model(**inputs)
+        return outputs.loss
 
 def is_dataset_built_on_rank():
     # return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0
@@ -99,16 +102,10 @@ def _build_tokenizer(args):
     """Initialize tokenizer."""
     global _GLOBAL_TOKENIZER
     logger.info(f"Loading tokenizer from {args.model_name_or_path}")
-    model_max_length = 8192
     _GLOBAL_TOKENIZER = AutoTokenizer.from_pretrained(
                             args.model_name_or_path, 
-                            model_max_length=model_max_length, 
-                            padding_side="left")
-    print(f"[DEBUG] Vocab size: {_GLOBAL_TOKENIZER.vocab_size}")
-    ids = [11221, 263, 4696, 5702, 988, 278, 7256, 10768, 313, 3166, 5993, 29871, 29945, 29900, 29900, 304, 5993, 29871, 29896, 29900, 29900, 29900, 29897, 338, 1034, 14214, 491, 11462, 29892, 5706, 263, 5941, 1873, 310, 278, 5702, 988, 278, 7256, 10768, 7087, 278, 3114, 29892, 11395, 362, 29892, 322, 18178, 29265, 310, 278, 18830, 24611, 313, 11083, 322, 1156, 278, 11462, 511, 4803, 278, 6763, 322, 1095, 24611, 408, 9282, 304, 337, 11433, 278, 4567, 470, 5625, 4063, 4004, 10597, 368, 29892, 5662, 3864, 409, 314, 2222, 9636, 3133, 537, 29889, 13, 29961, 15462, 276, 29962, 8198, 29899, 2481, 847, 17939, 13, 29961, 463, 1076, 29962, 13, 13, 13, 29961, 17662, 29962, 13, 13, 13, 29961, 355, 29962, 13, 13, 518, 2962, 29918, 974, 29918, 5679, 29962, 32001, 32016, 45824, 46025, 45669, 45387, 46053, 46189, 45748, 45387, 46221, 46025, 45872, 45387, 45872, 45669, 46025, 45822, 45748, 45874, 46263, 46095, 45874, 46025, 45362, 46189, 46304, 46025, 45387, 45872, 46304, 45362, 45362, 46269, 45872, 45422, 45406, 46263, 45422, 45797, 45874, 46095, 46111, 45874, 45874, 46304, 45630, 45387, 45387, 46095, 46132, 46189, 46304, 45822, 46269, 45669, 45872, 45782, 46095, 45761, 45748, 45406, 46304, 46025, 46025, 45748, 45362, 46095, 45387, 46111, 45354, 46095, 46304, 46095, 46025, 45782, 45406, 46304, 46304, 45362]
-    print(f"[DEBUG]: Sample ids decoded: {_GLOBAL_TOKENIZER.decode(ids)}")
-    print(f"[DEBUG] 32016: {_GLOBAL_TOKENIZER.convert_ids_to_tokens([32016])}")
-    print(f"[DEBUG] 45798: {_GLOBAL_TOKENIZER.convert_ids_to_tokens([45798])}")
+                            model_max_length=args.model_max_length, 
+                            padding_side="right")
     return _GLOBAL_TOKENIZER
 
 import random
@@ -273,28 +270,28 @@ def main():
         except Exception as e:
             logger.warning(f"Failed to initialize wandb: {e}. Continuing without wandb.")
 
-    # # Create trainer
-    # trainer = ScheduledSamplingTrainer(
-    #     model=model,
-    #     tokenizer=_GLOBAL_TOKENIZER,
-    #     args=training_args,
-    #     train_dataset=train_ds,
-    #     eval_dataset=valid_ds,
-    #     data_collator=default_data_collator,
-    #     initial_prob=1.0, 
-    #     final_prob=0.5, 
-    #     total_steps=train_steps,
-    # )
-
     # Create trainer
-    trainer = Trainer(
+    trainer = ScheduledSamplingTrainer(
         model=model,
         tokenizer=_GLOBAL_TOKENIZER,
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=valid_ds,
         data_collator=default_data_collator,
+        initial_prob=1.0, 
+        final_prob=0.5, 
+        total_steps=train_steps,
     )
+
+    # # Create trainer
+    # trainer = Trainer(
+    #     model=model,
+    #     tokenizer=_GLOBAL_TOKENIZER,
+    #     args=training_args,
+    #     train_dataset=train_ds,
+    #     eval_dataset=valid_ds,
+    #     data_collator=default_data_collator,
+    # )
     
     # Start training
     logger.info("Starting training...")
