@@ -50,11 +50,12 @@ class ScheduledSamplingTrainer(Trainer):
         if teacher_prob < 1.0 and self.state.global_step > 0:
             # First forward pass to get predictions
             # use bf16
-            with torch.no_grad(), autocast(device_type="cuda", dtype=torch.bfloat16):
-                outputs = model(**inputs)
-                sampled_ids = outputs.logits.argmax(dim=-1).to(torch.int32)
-                del outputs
-                torch.cuda.empty_cache()
+            with torch.no_grad():
+                with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+                    outputs = model(**inputs)
+                    sampled_ids = outputs.logits.argmax(dim=-1).to(torch.int32)
+                    del outputs
+                    torch.cuda.empty_cache()
 
             # Create mixed inputs
             mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
