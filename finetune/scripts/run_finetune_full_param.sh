@@ -6,9 +6,9 @@
 #email results, store console logs in a .out file
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=al4624
-#SBATCH --output=run_YuE_finetune_icl%j.out
+#SBATCH --output=gpu_job_logs/run_YuE_finetune_full_param%j.out
 
-rm -rf /vol/bitbucket/al4624/model_output/*
+rm -rf /vol/bitbucket/al4624/model_output_full_param/*
 
 # Help information
 print_help() {
@@ -120,7 +120,7 @@ NUM_TRAIN_EPOCHS=1
 
 # Data paths (replace with your actual paths)
 DATA_PATH="13270614 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
-DATA_CACHE_PATH="/vol/bitbucket/al4624/model_output/finetune_cache/data_cache"
+DATA_CACHE_PATH="/vol/bitbucket/al4624/model_output/general_cache/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split
 DATA_SPLIT="900,50,50"
@@ -128,8 +128,8 @@ DATA_SPLIT="900,50,50"
 # Model configuration
 TOKENIZER_MODEL_PATH="../inference/mm_tokenizer_v0.2_hf/tokenizer.model"
 MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-icl"
-MODEL_CACHE_DIR="/vol/bitbucket/al4624/cache/finetune_cache/model_cache"
-OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
+MODEL_CACHE_DIR="/vol/bitbucket/al4624/cache/general_cache/model_cache"
+OUTPUT_DIR="/vol/bitbucket/al4624/model_output_full_param"
 DEEPSPEED_CONFIG=config/ds_config_zero2.json
 
 LEARNING_RATE=3e-5

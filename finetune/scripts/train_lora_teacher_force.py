@@ -43,78 +43,60 @@ def find_tensor_sub_seq(batch_ids, sub_seq_ids):
     return positions
 
 class ScheduledSamplingTrainer(Trainer):
-    def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, sor_token_ids=None, eor_token_ids=None, sep_id=69, **kwargs):
-        # self.initial_prob = initial_prob
-        # self.final_prob = final_prob
-        # self.total_steps = total_steps
-        # self.current_step = 0
-        # self.sor_token_ids = sor_token_ids
-        # self.eor_token_ids = eor_token_ids
+    def __init__(self, *args, sor_token_ids=None, eor_token_ids=None, sep_id=69, **kwargs):
+        #WARNING: lazy fix, need better solution for multi gpu training
+        self.sor_ids_tensor = torch.tensor(sor_token_ids, dtype=torch.int)
+        self.eor_ids_tensor = torch.tensor(eor_token_ids, dtype=torch.int)
         #We also need to teacher force the xcodec marker token, since we know this token can mess up the model 
         self.sep_id = sep_id
         #should just be token 32016
-        print(f"[DEBUG] sep id is {self.sep_id}")
+        # print(f"[DEBUG] sep id is {self.sep_id}")
         # print(f"[DEBUG] sor tokens are {self.sor_token_ids}")
         # print(f"[DEBUG] eor tokens are {self.eor_token_ids}")
         super().__init__(*args, **kwargs)
 
-    # def _get_teacher_forcing_prob(self):
-    #     """Exponential decay for teacher forcing probability."""
-    #     decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
-    #     return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
+    def _get_teacher_force_mask(self, input_ids):
+        sor_ids_tensor = self.sor_ids_tensor.to(input_ids.device)
+        eor_ids_tensor = self.eor_ids_tensor.to(input_ids.device)
+
+        #obtain prompt mask to locate prompt tokens
+        sor_positions = find_tensor_sub_seq(input_ids, sor_ids_tensor)
+        eor_positions = find_tensor_sub_seq(input_ids, eor_ids_tensor)
+
+        prompt_complete_flags = (sor_positions < eor_positions).unsqueeze(1)
+        seq_range = torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0)
+
+        end_prompt_mask = (seq_range
+                            <= (eor_positions + len(eor_ids_tensor) - 1)
+                            .unsqueeze(1)).bool()
+        start_prompt_mask = (seq_range
+                        >= sor_positions
+                        .unsqueeze(1)).bool()
+
+        prompt_mask = torch.where(
+            prompt_complete_flags, 
+            start_prompt_mask & end_prompt_mask, 
+            start_prompt_mask | end_prompt_mask
+        )
+
+        #obtain sep_id mask
+        sep_mask = input_ids == self.sep_id
+
+        teacher_force_mask = prompt_mask | sep_mask
+
+        return teacher_force_mask
 
     def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
-        # self.current_step += 1
-        # teacher_prob = self._get_teacher_forcing_prob()
-        
-
         # Prepare inputs
         inputs = self._prepare_inputs(inputs)
         input_ids = inputs["input_ids"]
         # attention_mask = inputs.get("attention_mask", None)
         labels = inputs.get("labels", input_ids.clone())
         
-        # sor_ids_tensor = torch.tensor(self.sor_token_ids, dtype=torch.int, device=input_ids.device)
-        # eor_ids_tensor = torch.tensor(self.eor_token_ids, dtype=torch.int, device=input_ids.device)
-
-        #obtain prompt mask to locate prompt tokens
-        # sor_positions = find_tensor_sub_seq(input_ids, sor_ids_tensor)
-        # eor_positions = find_tensor_sub_seq(input_ids, eor_ids_tensor)
-        # prompt_complete_flags = (sor_positions < eor_positions).unsqueeze(1).repeat(1, input_ids.shape[1])
-        # end_prompt_mask = (torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0) 
-        #                     <= (eor_positions + len(eor_ids_tensor) - 1).unsqueeze(1))
-        # start_prompt_mask = (torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0) 
-        #                 >= (sor_positions).unsqueeze(1))
-        # prompt_mask = torch.where(prompt_complete_flags, start_prompt_mask & end_prompt_mask, start_prompt_mask | end_prompt_mask)
-        
-        #obtain sep_id mask
-        sep_mask = input_ids == self.sep_id
-
-        # teacher_force_mask = prompt_mask | sep_mask
-
-        teacher_force_mask = sep_mask
+        teacher_force_mask = self._get_teacher_force_mask(input_ids)
 
         # Forward pass with teacher forcing
         outputs = model(**inputs)
-        # logits = outputs.logits
-        
-        # outputs = None
-        # # Apply scheduled sampling
-        # if teacher_prob < 1.0 and self.state.global_step > 0:
-        #     # Sample from model predictions
-        #     with torch.no_grad():
-        #         outputs = model(**inputs)
-        #         logits = outputs.logits
-        #         sampled_ids = torch.argmax(logits, dim=-1)
-        #     #Never replace prompt tokens or sep token
-        #     replace_mask =  (~teacher_force_mask) & (torch.rand_like(input_ids.float()) > teacher_prob).bool()
-        #     # Shift right to align predictions with next tokens
-        #     shifted_sampled = torch.cat([input_ids[:, :1], sampled_ids[:, :-1]], dim=1)
-        #     input_ids = torch.where(replace_mask, shifted_sampled, input_ids)
-        #     # Re-run forward pass with mixed inputs
-        #     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        # else:
-        #     outputs = model(**inputs)
         
         #Mask loss for teacher force tokens
         labels = labels.masked_fill(teacher_force_mask, -100)
@@ -350,9 +332,6 @@ def main():
         train_dataset=train_ds,
         eval_dataset=valid_ds,
         data_collator=default_data_collator,
-        initial_prob=1.0, 
-        final_prob=0.5, 
-        total_steps=train_steps,
         sor_token_ids=_SOR_IDS,
         eor_token_ids=_EOR_IDS,
         sep_id=_SEP_ID,

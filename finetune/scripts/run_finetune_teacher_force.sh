@@ -6,7 +6,7 @@
 #email results, store console logs in a .out file
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=al4624
-#SBATCH --output=run_YuE_finetune_icl_teacher_force%j.out
+#SBATCH --output=gpu_job_logs/run_YuE_finetune_icl_teacher_force%j.out
 
 rm -rf /vol/bitbucket/al4624/model_output_icl/*
 
@@ -193,7 +193,7 @@ echo "==============================================="
 #     --save-steps $SAVE_STEPS \
 #     --deepspeed $DEEPSPEED_CONFIG"
 
-CMD="torchrun --nproc_per_node=$NUM_GPUS --master_port=$MASTER_PORT scripts/train_lora_icl.py \
+CMD="torchrun --nproc_per_node=$NUM_GPUS --master_port=$MASTER_PORT scripts/train_lora_teacher_force.py \
     --seq-length $SEQ_LENGTH \
     --data-path $DATA_PATH \
     --data-cache-path $DATA_CACHE_PATH \
