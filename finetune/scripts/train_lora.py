@@ -21,6 +21,9 @@ from core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatase
 from core.datasets.gpt_dataset import GPTDatasetConfig, GPTDataset
 from torch.cuda.amp import autocast
 
+
+# print(f"[DEBUG] transformers source files: {transformers.__file__}")
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -39,36 +42,144 @@ class ScheduledSamplingTrainer(Trainer):
         decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
         return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
 
+    # def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
+
+    #     if torch.cuda.is_available() and self.current_step % 10 == 0:
+    #         mem_alloc = torch.cuda.memory_allocated() / 1024**2
+    #         mem_reserved = torch.cuda.memory_reserved() / 1024**2
+    #         print(f"[START] [Step {self.current_step}] CUDA allocated: {mem_alloc:.2f} MB | reserved: {mem_reserved:.2f} MB")
+    
+    #     self.current_step += 1
+    #     teacher_prob = self._get_teacher_forcing_prob()
+    
+    #     inputs = self._prepare_inputs(inputs)
+    #     input_ids = inputs["input_ids"]
+    
+    # 	# Only perform scheduled sampling when needed
+    #     if teacher_prob < 1.0 and self.state.global_step > 0:
+    #         # First forward pass to get predictions
+    #         # use bf16
+    #         with torch.no_grad(), torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+    #             outputs = model(**inputs)
+    #             sampled_ids = outputs.logits.argmax(dim=-1).to(torch.int32).cpu()
+    #         del outputs
+    #         torch.cuda.empty_cache()
+
+    #         # Create mixed inputs
+    #         mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
+    #         shifted_sampled = input_ids.clone()
+    #         shifted_sampled[:, 1:] = sampled_ids[:, :-1].to(input_ids.device)
+    #         mixed_input_ids = torch.where(mask, shifted_sampled, input_ids)
+
+        
+    #         # Replace input_ids with mixed version
+    #         inputs["input_ids"] = mixed_input_ids
+
+    #         del sampled_ids, shifted_sampled, mask, mixed_input_ids
+    #         torch.cuda.empty_cache()
+        
+    #     # Single forward pass (either original or with mixed inputs)
+    #     with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+    #         outputs = model(**inputs)
+
+    #     loss = outputs.loss
+
+    #     #cleanup
+    #     del outputs
+    #     torch.cuda.empty_cache()
+        
+    #     if torch.cuda.is_available() and self.current_step % 10 == 0:
+    #         mem_alloc = torch.cuda.memory_allocated() / 1024**2
+    #         mem_reserved = torch.cuda.memory_reserved() / 1024**2
+    #         print(f"[END] [Step {self.current_step}] CUDA allocated: {mem_alloc:.2f} MB | reserved: {mem_reserved:.2f} MB")
+
+
+    #     return loss
     def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
+        # --- one-time safety toggles (cheap to run every step) ---
+
+        if getattr(model, "config", None) is not None and getattr(model.config, "use_cache", None) is not False:
+            model.config.use_cache = False
+
+        # If you *ever* enabled these in TrainingArguments, they explode memory
+        # Make sure they're False at runtime:
+        if hasattr(model, "config"):
+            if getattr(model.config, "output_hidden_states", False):
+                model.config.output_hidden_states = False
+            if getattr(model.config, "output_attentions", False):
+                model.config.output_attentions = False
+
+
+        #Update schedule sampling params
         self.current_step += 1
         teacher_prob = self._get_teacher_forcing_prob()
-    
-        inputs = self._prepare_inputs(inputs)
-        input_ids = inputs["input_ids"]
-    
-    	# Only perform scheduled sampling when needed
-        if teacher_prob < 1.0 and self.state.global_step > 0:
-            # First forward pass to get predictions
-            # use bf16
-            with torch.no_grad():
-                with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
-                    outputs = model(**inputs)
-                    sampled_ids = outputs.logits.argmax(dim=-1).to(torch.int32)
-                    del outputs
-                    torch.cuda.empty_cache()
 
-            # Create mixed inputs
-            mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
-            shifted_sampled = input_ids.clone()
-            shifted_sampled[:, 1:] = sampled_ids[:, :-1]
-            mixed_input_ids = torch.where(mask, shifted_sampled, input_ids)
-        
-            # Replace input_ids with mixed version
-            inputs["input_ids"] = mixed_input_ids
-        
-        # Single forward pass (either original or with mixed inputs)
-        outputs = model(**inputs)
-        return outputs.loss
+        #get inputs
+        inputs = self._prepare_inputs(inputs)
+        input_ids = inputs["input_ids"]  # shape: [B, T], dtype: long/int
+
+        # Reset peak memory stats so we can see per-step peaks
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+
+        # ---------- Scheduled sampling (no-grad, inference_mode = leanest) ----------
+        if teacher_prob < 1.0 and self.state.global_step > 0:
+            # 1) get next-token predictions WITHOUT creating autograd history *and* with minimal overhead
+            with torch.inference_mode(), torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+                ss_out = model(**inputs)
+                # ss_out.logits: [B, T, V]
+                sampled_ids = ss_out.logits.argmax(dim=-1).to(torch.int32)  # [B, T]
+            # Immediately free the large logits tensor
+            del ss_out
+
+            # 2) In-place mixing to avoid new big tensors (no torch.where on full matrix)
+            #    mask on CUDA (no CPU roundtrip), then selectively overwrite positions.
+            #    This keeps only *one* clone of input_ids.
+            mask = (torch.rand_like(input_ids, dtype=torch.float32) > teacher_prob).bool()  # [B, T] on device
+            if mask.any():
+                # Shift sampled ids (teacher forcing only applies from pos 1)
+                # Create a small, temporary view; avoid building a whole "shifted" copy if mask is sparse
+                # Make a working copy of input_ids only if we actually modify it
+                mixed = input_ids.clone()  # one clone for the whole step
+
+                # Target tokens that will replace positions 1..T-1
+                tgt = sampled_ids[:, :-1].to(device=input_ids.device, dtype=input_ids.dtype)
+
+                m = mask[:, 1:]  # only positions that can be replaced
+                if m.any():
+                    mixed[:, 1:][m] = tgt[m]
+
+                inputs["input_ids"] = mixed
+                # free temps
+                del mixed, tgt
+            # free temps
+            del sampled_ids, mask
+
+        # ---------- Main forward (with grad) ----------
+        with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+            out = model(**inputs)
+        loss = out.loss
+
+        # Cleanup *now* so trainer logging/accumulation won't hold onto tensors
+        del out
+        del inputs
+        torch.cuda.empty_cache()
+
+        # Optional: print mem stats every N steps
+        if torch.cuda.is_available() and (self.current_step % 10 == 0 or self.current_step < 5):
+            alloc_mb = torch.cuda.memory_allocated() / 1024**2
+            reserv_mb = torch.cuda.memory_reserved() / 1024**2
+            peak_mb  = torch.cuda.max_memory_allocated() / 1024**2
+            stats = torch.cuda.memory_stats()
+            active   = stats.get("active_bytes.all.current", 0) / 1024**2
+            inactive = stats.get("inactive_split_bytes.all.current", 0) / 1024**2  # fragmentation proxy
+            print(
+                f"[Step {self.current_step}] "
+                f"alloc={alloc_mb:.1f}MB | reserved={reserv_mb:.1f}MB | peak={peak_mb:.1f}MB | "
+                f"active={active:.1f}MB | inactive_split={inactive:.1f}MB"
+            )
+        return loss.detach()
+
 
 def is_dataset_built_on_rank():
     # return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0

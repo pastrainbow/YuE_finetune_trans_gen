@@ -6,9 +6,10 @@
 #email results, store console logs in a .out file
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=al4624
-#SBATCH --output=run_YuE_finetune_icl%j.out
+#SBATCH --output=gpu_job_logs/run_YuE_finetune_schedule_sampling%j.out
 
 rm -rf /vol/bitbucket/al4624/model_output/*
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Help information
 print_help() {
@@ -144,9 +145,9 @@ LORA_ALPHA=32  # Keep same ratio (alpha/r = 2)
 LORA_DROPOUT=0.05  # Reduced dropout
 LORA_TARGET_MODULES="q_proj k_proj v_proj o_proj gate_proj down_proj up_proj" 
 # Logging configuration
-LOGGING_STEPS=5
-SAVE_STEPS=5
-EVAL_STEPS=5
+LOGGING_STEPS=50000000000000000000
+SAVE_STEPS=50000000000000000000000
+EVAL_STEPS=500000000000000000000000
 USE_WANDB=true
 WANDB_API_KEY="632660fd9c33316b26281741852eb6f6595139a6"
 RUN_NAME="YuE-ft-lora"
