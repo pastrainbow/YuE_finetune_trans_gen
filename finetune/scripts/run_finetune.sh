@@ -111,16 +111,16 @@ MASTER_PORT=9999
 # export CUDA_VISIBLE_DEVICES=4,5,6,7
 
 # Training hyperparameters
-PER_DEVICE_TRAIN_BATCH_SIZE=1
-PER_DEVICE_EVAL_BATCH_SIZE=1
+PER_DEVICE_TRAIN_BATCH_SIZE=4
+PER_DEVICE_EVAL_BATCH_SIZE=4
 GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
-SEQ_LENGTH=2048
-TRAIN_ITERS=6479
-NUM_TRAIN_EPOCHS=1
+SEQ_LENGTH=5000 #each 30s track training sequence has length of around 4800 tokens, 5000 should thus cover a whole sequence
+TRAIN_ITERS=3979
+NUM_TRAIN_EPOCHS=5
 
 # Data paths (replace with your actual paths)
-DATA_PATH="13270614 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
+DATA_PATH="79599603 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
 DATA_CACHE_PATH="/vol/bitbucket/al4624/model_output/finetune_cache/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split
@@ -133,24 +133,24 @@ MODEL_CACHE_DIR="/vol/bitbucket/al4624/cache/finetune_cache/model_cache"
 OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
 DEEPSPEED_CONFIG=config/ds_config_zero2.json
 
-LEARNING_RATE=3e-5
+LEARNING_RATE=3e-4 #this is the constant learning rate of the context extension training phase, so should be a good starting point
 LR_SCHEDULER_TYPE="cosine"
 WARMUP_RATIO=0.05
 WEIGHT_DECAY=0.01
 GRADIENT_ACCUMULATION_STEPS=4
 
 # LoRA configuration
-LORA_R=16  # Smaller rank may help prevent overfitting
-LORA_ALPHA=32  # Keep same ratio (alpha/r = 2)
-LORA_DROPOUT=0.05  # Reduced dropout
+LORA_R=64
+LORA_ALPHA=32
+LORA_DROPOUT=0.1
 LORA_TARGET_MODULES="q_proj k_proj v_proj o_proj gate_proj down_proj up_proj" 
 # Logging configuration
-LOGGING_STEPS=50000000000000000000
-SAVE_STEPS=50000000000000000000000
-EVAL_STEPS=500000000000000000000000
+LOGGING_STEPS=500
+SAVE_STEPS=500
+EVAL_STEPS=500
 USE_WANDB=true
 WANDB_API_KEY="632660fd9c33316b26281741852eb6f6595139a6"
-RUN_NAME="YuE-ft-lora"
+RUN_NAME="YuE-ft-lora-schedule-sampling"
 
 # ==============================
 # Environment Setup

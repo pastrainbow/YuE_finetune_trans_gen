@@ -96,20 +96,6 @@ class ScheduledSamplingTrainer(Trainer):
 
     #     return loss
     def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
-        # --- one-time safety toggles (cheap to run every step) ---
-
-        if getattr(model, "config", None) is not None and getattr(model.config, "use_cache", None) is not False:
-            model.config.use_cache = False
-
-        # If you *ever* enabled these in TrainingArguments, they explode memory
-        # Make sure they're False at runtime:
-        if hasattr(model, "config"):
-            if getattr(model.config, "output_hidden_states", False):
-                model.config.output_hidden_states = False
-            if getattr(model.config, "output_attentions", False):
-                model.config.output_attentions = False
-
-
         #Update schedule sampling params
         self.current_step += 1
         teacher_prob = self._get_teacher_forcing_prob()

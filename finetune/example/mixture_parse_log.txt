@@ -4,9 +4,9 @@
 [INFO] DB2TOKCNT reloaded from the logs in ./count_token_logs
 
 [CRITICAL] DATA_PATH **(copy to the training script)**:
-13270614 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document 
+79599603 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document 
 
 [CRITICAL] TRAIN_ITERS **(copy to the training script)**:
-6479.7919921875
+3979.98015
 
-[INFO] Total token count: 0.013B
+[INFO] Total token count: 0.080B

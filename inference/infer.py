@@ -256,6 +256,10 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
             elif args.use_audio_prompt:
                 audio_prompt = prompts_concat(args.start_audio_prompt_path, args.end_audio_prompt_path, args.gen_duration, device)
                 raw_codes = encode_audio(codec_model, audio_prompt, device, target_bw=0.5)
+                
+                # start_audio = load_audio_mono(args.start_audio_prompt_path)
+                # start_codes = encode_audio(codec_model, start_audio, device, target_bw=0.5)
+
                 #np.save("/homes/al4624/Documents/YuE_finetune/test_files/prompt_concat_codes.npy", raw_codes_real)
                 # print(f"[DEBUG] real raw codes: {raw_codes_real}, with shape {raw_codes_real.shape}")
 
@@ -266,17 +270,27 @@ for i, p in enumerate(tqdm(prompt_texts[:run_n_segments], desc="Stage1 inference
 
                 max_new_tokens = len(raw_codes[0][0])
                 print(f"[DEBUG] max_new_tokens is set to {max_new_tokens}")
+
                 # Format audio prompt
                 code_ids = codectool.npy2ids(raw_codes[0])
-                # audio_prompt_codec = code_ids[int(args.prompt_start_time *50): int(args.prompt_end_time *50)] # 50 is tps of xcodec
+
+                # Format start audio
+                # start_code_ids = codectool.npy2ids(start_codes[0])
+
                 audio_prompt_codec = code_ids #no slicing
+
+                # start_audio_codec = start_code_ids
+
             audio_prompt_codec_ids = [mmtokenizer.soa] + codectool.sep_ids + audio_prompt_codec + [mmtokenizer.eoa]
             sentence_ids = mmtokenizer.tokenize("[start_of_reference]") +  audio_prompt_codec_ids + mmtokenizer.tokenize("[end_of_reference]")
             head_id = mmtokenizer.tokenize(prompt_texts[0]) + sentence_ids
         else:
             head_id = mmtokenizer.tokenize(prompt_texts[0])
         prompt_ids = head_id + start_of_segment + mmtokenizer.tokenize(section_text) + [mmtokenizer.soa] + codectool.sep_ids
-        # prompt_ids = head_id + start_of_segment + mmtokenizer.tokenize(section_text) + [mmtokenizer.soa] + codectool.sep_ids + [45777] #TESTING, REMEMBER TO REMOVE THIS LINE!!!!!!!!!!!!!
+
+        #we teacher force the start segment, since it should be identical anyway and there's no point for the model to generate it
+        # prompt_ids += start_audio_codec + [mmtokenizer.eoa] + end_of_segment + start_of_segment + mmtokenizer.tokenize("[beginning]\n\n\n") + [mmtokenizer.soa] + codectool.sep_ids
+
     else:
         prompt_ids = end_of_segment + start_of_segment + mmtokenizer.tokenize(section_text) + [mmtokenizer.soa] + codectool.sep_ids
 
