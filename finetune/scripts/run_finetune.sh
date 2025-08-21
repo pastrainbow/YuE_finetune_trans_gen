@@ -111,12 +111,12 @@ MASTER_PORT=9999
 # export CUDA_VISIBLE_DEVICES=4,5,6,7
 
 # Training hyperparameters
-PER_DEVICE_TRAIN_BATCH_SIZE=4
-PER_DEVICE_EVAL_BATCH_SIZE=4
+PER_DEVICE_TRAIN_BATCH_SIZE=8
+PER_DEVICE_EVAL_BATCH_SIZE=8
 GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
 SEQ_LENGTH=5000 #each 30s track training sequence has length of around 4800 tokens, 5000 should thus cover a whole sequence
-TRAIN_ITERS=3979
+TRAIN_ITERS=1989
 NUM_TRAIN_EPOCHS=5
 
 # Data paths (replace with your actual paths)
