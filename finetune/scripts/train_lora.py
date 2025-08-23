@@ -42,59 +42,6 @@ class ScheduledSamplingTrainer(Trainer):
         decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
         return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
 
-    # def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
-
-    #     if torch.cuda.is_available() and self.current_step % 10 == 0:
-    #         mem_alloc = torch.cuda.memory_allocated() / 1024**2
-    #         mem_reserved = torch.cuda.memory_reserved() / 1024**2
-    #         print(f"[START] [Step {self.current_step}] CUDA allocated: {mem_alloc:.2f} MB | reserved: {mem_reserved:.2f} MB")
-    
-    #     self.current_step += 1
-    #     teacher_prob = self._get_teacher_forcing_prob()
-    
-    #     inputs = self._prepare_inputs(inputs)
-    #     input_ids = inputs["input_ids"]
-    
-    # 	# Only perform scheduled sampling when needed
-    #     if teacher_prob < 1.0 and self.state.global_step > 0:
-    #         # First forward pass to get predictions
-    #         # use bf16
-    #         with torch.no_grad(), torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
-    #             outputs = model(**inputs)
-    #             sampled_ids = outputs.logits.argmax(dim=-1).to(torch.int32).cpu()
-    #         del outputs
-    #         torch.cuda.empty_cache()
-
-    #         # Create mixed inputs
-    #         mask = (torch.rand_like(input_ids.float()) > teacher_prob).bool()
-    #         shifted_sampled = input_ids.clone()
-    #         shifted_sampled[:, 1:] = sampled_ids[:, :-1].to(input_ids.device)
-    #         mixed_input_ids = torch.where(mask, shifted_sampled, input_ids)
-
-        
-    #         # Replace input_ids with mixed version
-    #         inputs["input_ids"] = mixed_input_ids
-
-    #         del sampled_ids, shifted_sampled, mask, mixed_input_ids
-    #         torch.cuda.empty_cache()
-        
-    #     # Single forward pass (either original or with mixed inputs)
-    #     with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
-    #         outputs = model(**inputs)
-
-    #     loss = outputs.loss
-
-    #     #cleanup
-    #     del outputs
-    #     torch.cuda.empty_cache()
-        
-    #     if torch.cuda.is_available() and self.current_step % 10 == 0:
-    #         mem_alloc = torch.cuda.memory_allocated() / 1024**2
-    #         mem_reserved = torch.cuda.memory_reserved() / 1024**2
-    #         print(f"[END] [Step {self.current_step}] CUDA allocated: {mem_alloc:.2f} MB | reserved: {mem_reserved:.2f} MB")
-
-
-    #     return loss
     def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
         #Update schedule sampling params
         self.current_step += 1
@@ -102,6 +49,12 @@ class ScheduledSamplingTrainer(Trainer):
 
         #get inputs
         inputs = self._prepare_inputs(inputs)
+
+        #[TESTING] move inputs to GPU early to free system RAM and avoid OOM kill
+        for k, v in list(inputs.items()):
+            if isinstance(v, torch.Tensor):
+                inputs[k] = v.to("cuda", non_blocking=True)
+
         input_ids = inputs["input_ids"]  # shape: [B, T], dtype: long/int
 
         # Reset peak memory stats so we can see per-step peaks

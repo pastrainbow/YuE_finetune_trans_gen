@@ -9,7 +9,6 @@
 #SBATCH --output=gpu_job_logs/run_YuE_finetune_schedule_sampling%j.out
 
 rm -rf /vol/bitbucket/al4624/model_output/*
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Help information
 print_help() {
@@ -119,6 +118,8 @@ SEQ_LENGTH=5000 #each 30s track training sequence has length of around 4800 toke
 TRAIN_ITERS=1989
 NUM_TRAIN_EPOCHS=5
 
+DATALOADER_NUM_WORKERS=4
+
 # Data paths (replace with your actual paths)
 DATA_PATH="79599603 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
 DATA_CACHE_PATH="/vol/bitbucket/al4624/model_output/finetune_cache/data_cache"
@@ -215,6 +216,7 @@ CMD="torchrun --nproc_per_node=$NUM_GPUS --master_port=$MASTER_PORT scripts/trai
     --eod-mask-loss \
     --enable-shuffle \
     --finetune \
+    --dataloader-num-workers $DATALOADER_NUM_WORKERS \
     --deepspeed $DEEPSPEED_CONFIG"
 
 
