@@ -50,10 +50,10 @@ class ScheduledSamplingTrainer(Trainer):
         #get inputs
         inputs = self._prepare_inputs(inputs)
 
-        #[TESTING] move inputs to GPU early to free system RAM and avoid OOM kill
-        for k, v in list(inputs.items()):
-            if isinstance(v, torch.Tensor):
-                inputs[k] = v.to("cuda", non_blocking=True)
+        # #[TESTING] move inputs to GPU early to free system RAM and avoid OOM kill
+        # for k, v in list(inputs.items()):
+        #     if isinstance(v, torch.Tensor):
+        #         inputs[k] = v.to("cuda", non_blocking=True)
 
         input_ids = inputs["input_ids"]  # shape: [B, T], dtype: long/int
 
