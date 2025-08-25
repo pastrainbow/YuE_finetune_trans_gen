@@ -821,6 +821,8 @@ def _add_finetune_args(parser):
                        help='Path to save the finetuned model.')
     group.add_argument('--schedule-sampling', action='store_true',
                        help='Enable schedule sampling training')
+    group.add_argument('--prompt-teacher-force', action='store_true',
+                       help='Enable teacher forcing of ICL prompt tokens')
     
     # LoRA parameters
     group.add_argument('--lora-r', type=int, default=64,

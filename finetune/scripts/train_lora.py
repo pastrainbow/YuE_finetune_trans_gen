@@ -30,11 +30,29 @@ logger = logging.getLogger(__name__)
 
 _GLOBAL_TOKENIZER = None
 
+
+def find_tensor_sub_seq(batch_ids, sub_seq_ids):    
+    first_token = sub_seq_ids[0]
+    batch_size, seq_len = batch_ids.shape
+    sub_seq_len = len(sub_seq_ids)
+    positions = torch.full((batch_size,), seq_len, dtype=torch.int, device=batch_ids.device)
+    for b in range(batch_size):
+        seq = batch_ids[b]
+        candidate_positions = (seq == first_token).nonzero(as_tuple=True)[0]
+        for pos in candidate_positions:
+            if pos + sub_seq_len <= seq_len:
+                window = seq[pos:pos+sub_seq_len]
+                if torch.all(window == sub_seq_ids):
+                    positions[b] = pos
+                    break
+    return positions
+
 class ScheduledSamplingTrainer(Trainer):
-    def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, **kwargs):
+    def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, teacher_force=False, **kwargs):
         self.initial_prob = initial_prob
         self.final_prob = final_prob
         self.total_steps = total_steps
+        self.teacher_force = teacher_force
         self.current_step = 0
         super().__init__(*args, **kwargs)
 
@@ -114,13 +132,46 @@ class ScheduledSamplingTrainer(Trainer):
     #         )
     #     return loss.detach()
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def _get_teacher_force_mask(self, input_ids):
+        sor_ids_tensor = self.sor_ids_tensor.to(input_ids.device)
+        eor_ids_tensor = self.eor_ids_tensor.to(input_ids.device)
+
+        #obtain prompt mask to locate prompt tokens
+        sor_positions = find_tensor_sub_seq(input_ids, sor_ids_tensor)
+        eor_positions = find_tensor_sub_seq(input_ids, eor_ids_tensor)
+
+        prompt_complete_flags = (sor_positions < eor_positions).unsqueeze(1)
+        seq_range = torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0)
+
+        end_prompt_mask = (seq_range
+                            <= (eor_positions + len(eor_ids_tensor) - 1)
+                            .unsqueeze(1)).bool()
+        start_prompt_mask = (seq_range
+                        >= sor_positions
+                        .unsqueeze(1)).bool()
+
+        prompt_mask = torch.where(
+            prompt_complete_flags, 
+            start_prompt_mask & end_prompt_mask, 
+            start_prompt_mask | end_prompt_mask
+        )
+
+        #obtain sep_id mask
+        sep_mask = input_ids == self.sep_id
+
+        teacher_force_mask = prompt_mask | sep_mask
+
+        return teacher_force_mask
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         # Step counter
         self.current_step += 1
         teacher_prob = self._get_teacher_forcing_prob()
 
         inputs = self._prepare_inputs(inputs)
         input_ids = inputs["input_ids"]
+
+        labels = inputs.pop("labels")
 
         # --- Scheduled sampling branch ---
         if teacher_prob < 1.0 and self.state.global_step > 0:
@@ -147,7 +198,20 @@ class ScheduledSamplingTrainer(Trainer):
         with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
             outputs = model(**inputs)
 
-        loss = outputs.loss
+        loss = None
+
+        if self.teacher_force:
+            if DEBUG: print(f"[DEBUG] Prompt teacher forcing")
+            teacher_force_mask = self._get_teacher_force_mask(input_ids)
+            labels = labels.masked_fill(teacher_force_mask, -100)
+            loss = torch.nn.functional.cross_entropy(
+                outputs.logits.view(-1, outputs.logits.size(-1)),
+                labels.view(-1),
+                ignore_index=-100
+            )
+        else:
+            if DEBUG: print(f"[DEBUG] No prompt teacher forcing")
+            loss = outputs.loss
 
         return (loss, outputs) if return_outputs else loss
 
@@ -368,6 +432,7 @@ def main():
             initial_prob=1.0, 
             final_prob=0.5, 
             total_steps=train_steps,
+            teacher_force=args.prompt_teacher_force,
         )
     else:
         if DEBUG: print(f"[DEBUG] Default trainer")
