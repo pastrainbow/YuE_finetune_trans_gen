@@ -21,8 +21,9 @@ from core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatase
 from core.datasets.gpt_dataset import GPTDatasetConfig, GPTDataset
 from torch.cuda.amp import autocast
 
+DEBUG = True
 
-# print(f"[DEBUG] transformers source files: {transformers.__file__}")
+# if DEBUG: print(f"[DEBUG] transformers source files: {transformers.__file__}")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -42,82 +43,113 @@ class ScheduledSamplingTrainer(Trainer):
         decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
         return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
 
-    def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
-        #Update schedule sampling params
+    # def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
+    #     #Update schedule sampling params
+    #     self.current_step += 1
+    #     teacher_prob = self._get_teacher_forcing_prob()
+
+    #     #get inputs
+    #     inputs = self._prepare_inputs(inputs)
+    #     input_ids = inputs["input_ids"]  # shape: [B, T], dtype: long/int
+
+    #     # Reset peak memory stats so we can see per-step peaks
+    #     if torch.cuda.is_available():
+    #         torch.cuda.reset_peak_memory_stats()
+
+    #     # ---------- Scheduled sampling (no-grad, inference_mode = leanest) ----------
+    #     if teacher_prob < 1.0 and self.state.global_step > 0:
+    #         # 1) get next-token predictions WITHOUT creating autograd history *and* with minimal overhead
+    #         with torch.inference_mode(), torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+    #             ss_out = model(**inputs)
+    #             # ss_out.logits: [B, T, V]
+    #             sampled_ids = ss_out.logits.argmax(dim=-1).to(torch.int32)  # [B, T]
+    #         # Immediately free the large logits tensor
+    #         del ss_out
+
+    #         # 2) In-place mixing to avoid new big tensors (no torch.where on full matrix)
+    #         #    mask on CUDA (no CPU roundtrip), then selectively overwrite positions.
+    #         #    This keeps only *one* clone of input_ids.
+    #         mask = (torch.rand_like(input_ids, dtype=torch.float32) > teacher_prob).bool()  # [B, T] on device
+    #         if mask.any():
+    #             # Shift sampled ids (teacher forcing only applies from pos 1)
+    #             # Create a small, temporary view; avoid building a whole "shifted" copy if mask is sparse
+    #             # Make a working copy of input_ids only if we actually modify it
+    #             mixed = input_ids.clone()  # one clone for the whole step
+
+    #             # Target tokens that will replace positions 1..T-1
+    #             tgt = sampled_ids[:, :-1].to(device=input_ids.device, dtype=input_ids.dtype)
+
+    #             m = mask[:, 1:]  # only positions that can be replaced
+    #             if m.any():
+    #                 mixed[:, 1:][m] = tgt[m]
+
+    #             inputs["input_ids"] = mixed
+    #             # free temps
+    #             del mixed, tgt
+    #         # free temps
+    #         del sampled_ids, mask
+
+    #     # ---------- Main forward (with grad) ----------
+    #     with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+    #         out = model(**inputs)
+    #     loss = out.loss
+
+    #     # Cleanup *now* so trainer logging/accumulation won't hold onto tensors
+    #     del out
+    #     del inputs
+    #     torch.cuda.empty_cache()
+
+    #     # Optional: print mem stats every N steps
+    #     if torch.cuda.is_available() and (self.current_step % 10 == 0 or self.current_step < 5):
+    #         alloc_mb = torch.cuda.memory_allocated() / 1024**2
+    #         reserv_mb = torch.cuda.memory_reserved() / 1024**2
+    #         peak_mb  = torch.cuda.max_memory_allocated() / 1024**2
+    #         stats = torch.cuda.memory_stats()
+    #         active   = stats.get("active_bytes.all.current", 0) / 1024**2
+    #         inactive = stats.get("inactive_split_bytes.all.current", 0) / 1024**2  # fragmentation proxy
+    #         print(
+    #             f"[Step {self.current_step}] "
+    #             f"alloc={alloc_mb:.1f}MB | reserved={reserv_mb:.1f}MB | peak={peak_mb:.1f}MB | "
+    #             f"active={active:.1f}MB | inactive_split={inactive:.1f}MB"
+    #         )
+    #     return loss.detach()
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # Step counter
         self.current_step += 1
         teacher_prob = self._get_teacher_forcing_prob()
 
-        #get inputs
         inputs = self._prepare_inputs(inputs)
+        input_ids = inputs["input_ids"]
 
-        # #[TESTING] move inputs to GPU early to free system RAM and avoid OOM kill
-        # for k, v in list(inputs.items()):
-        #     if isinstance(v, torch.Tensor):
-        #         inputs[k] = v.to("cuda", non_blocking=True)
-
-        input_ids = inputs["input_ids"]  # shape: [B, T], dtype: long/int
-
-        # Reset peak memory stats so we can see per-step peaks
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
-
-        # ---------- Scheduled sampling (no-grad, inference_mode = leanest) ----------
+        # --- Scheduled sampling branch ---
         if teacher_prob < 1.0 and self.state.global_step > 0:
-            # 1) get next-token predictions WITHOUT creating autograd history *and* with minimal overhead
-            with torch.inference_mode(), torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
+            with torch.inference_mode(), torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
                 ss_out = model(**inputs)
-                # ss_out.logits: [B, T, V]
-                sampled_ids = ss_out.logits.argmax(dim=-1).to(torch.int32)  # [B, T]
-            # Immediately free the large logits tensor
-            del ss_out
+                sampled_ids = ss_out.logits.argmax(dim=-1).to(torch.int32)
 
-            # 2) In-place mixing to avoid new big tensors (no torch.where on full matrix)
-            #    mask on CUDA (no CPU roundtrip), then selectively overwrite positions.
-            #    This keeps only *one* clone of input_ids.
-            mask = (torch.rand_like(input_ids, dtype=torch.float32) > teacher_prob).bool()  # [B, T] on device
+            del ss_out  # free memory
+
+            # Random mask of positions to replace with model predictions
+            mask = (torch.rand_like(input_ids, dtype=torch.float32) > teacher_prob).bool()
+
             if mask.any():
-                # Shift sampled ids (teacher forcing only applies from pos 1)
-                # Create a small, temporary view; avoid building a whole "shifted" copy if mask is sparse
-                # Make a working copy of input_ids only if we actually modify it
-                mixed = input_ids.clone()  # one clone for the whole step
-
-                # Target tokens that will replace positions 1..T-1
+                mixed = input_ids.clone()
                 tgt = sampled_ids[:, :-1].to(device=input_ids.device, dtype=input_ids.dtype)
-
-                m = mask[:, 1:]  # only positions that can be replaced
+                m = mask[:, 1:]
                 if m.any():
                     mixed[:, 1:][m] = tgt[m]
-
                 inputs["input_ids"] = mixed
-                # free temps
-                del mixed, tgt
-            # free temps
+
             del sampled_ids, mask
 
-        # ---------- Main forward (with grad) ----------
-        with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
-            out = model(**inputs)
-        loss = out.loss
+        # --- Forward pass with grad ---
+        with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+            outputs = model(**inputs)
 
-        # Cleanup *now* so trainer logging/accumulation won't hold onto tensors
-        del out
-        del inputs
-        torch.cuda.empty_cache()
+        loss = outputs.loss
 
-        # Optional: print mem stats every N steps
-        if torch.cuda.is_available() and (self.current_step % 10 == 0 or self.current_step < 5):
-            alloc_mb = torch.cuda.memory_allocated() / 1024**2
-            reserv_mb = torch.cuda.memory_reserved() / 1024**2
-            peak_mb  = torch.cuda.max_memory_allocated() / 1024**2
-            stats = torch.cuda.memory_stats()
-            active   = stats.get("active_bytes.all.current", 0) / 1024**2
-            inactive = stats.get("inactive_split_bytes.all.current", 0) / 1024**2  # fragmentation proxy
-            print(
-                f"[Step {self.current_step}] "
-                f"alloc={alloc_mb:.1f}MB | reserved={reserv_mb:.1f}MB | peak={peak_mb:.1f}MB | "
-                f"active={active:.1f}MB | inactive_split={inactive:.1f}MB"
-            )
-        return loss.detach()
+        return (loss, outputs) if return_outputs else loss
 
 
 def is_dataset_built_on_rank():
@@ -125,13 +157,14 @@ def is_dataset_built_on_rank():
     return True
 
 def core_gpt_dataset_config_from_args(args):
-    print(f"[DEBUG] train_data_path: {args.train_data_path}")
-    print(f"[DEBUG] valid_data_path: {args.valid_data_path}")
-    print(f"[DEBUG] test_data_path: {args.test_data_path}")
-    print(f"[DEBUG] EOD mask loss: {args.eod_mask_loss}" )
-    print(f"[DEBUG] Reset position ids: {args.reset_position_ids}")
-    print(f"[DEBUG] Reset attention mask: {args.reset_attention_mask}")
-    print(f"[DEBUG] Enable shuffle: {args.enable_shuffle}")
+    if DEBUG:
+        print(f"[DEBUG] train_data_path: {args.train_data_path}")
+        print(f"[DEBUG] valid_data_path: {args.valid_data_path}")
+        print(f"[DEBUG] test_data_path: {args.test_data_path}")
+        print(f"[DEBUG] EOD mask loss: {args.eod_mask_loss}" )
+        print(f"[DEBUG] Reset position ids: {args.reset_position_ids}")
+        print(f"[DEBUG] Reset attention mask: {args.reset_attention_mask}")
+        print(f"[DEBUG] Enable shuffle: {args.enable_shuffle}")
 
     return GPTDatasetConfig(
         is_built_on_rank=is_dataset_built_on_rank,
@@ -184,17 +217,18 @@ def build_train_valid_test_datasets(args):
         ).build()
         logger.info("> Finished creating datasets")
         
-        # Debugging: Print a few random examples from the training dataset
-        num_examples = min(5, len(train_ds))
-        sample_indices = random.sample(range(len(train_ds)), num_examples)
-        for i, idx in enumerate(sample_indices):
-            example = train_ds[idx]
-            print(f"[DEBUG] Random Example {i} (index {idx}):")
-            for k, v in example.items():
-                if isinstance(v, torch.Tensor):
-                    print(f"Tensor [{k}]: shape={v.shape}\n{v}")
-                else:
-                    print(f"{k}: {v}")
+        if DEBUG:
+            # Debugging: Print a few random examples from the training dataset
+            num_examples = min(5, len(train_ds))
+            sample_indices = random.sample(range(len(train_ds)), num_examples)
+            for i, idx in enumerate(sample_indices):
+                example = train_ds[idx]
+                print(f"[DEBUG] Random Example {i} (index {idx}):")
+                for k, v in example.items():
+                    if isinstance(v, torch.Tensor):
+                        print(f"Tensor [{k}]: shape={v.shape}\n{v}")
+                    else:
+                        print(f"{k}: {v}")
 
         return train_ds, valid_ds, test_ds
     except Exception as e:
@@ -257,7 +291,7 @@ def create_and_configure_model(args):
             cache_dir=args.cache_dir
         )
         model.gradient_checkpointing_enable()
-        print(f"[DEBUG] Model gradient checkpointing enabled: {model.is_gradient_checkpointing}")
+        if DEBUG: print(f"[DEBUG] Model gradient checkpointing enabled: {model.is_gradient_checkpointing}")
         logger.info(f"Configuring LoRA with r={args.lora_r}, alpha={args.lora_alpha}")
         lora_config = LoraConfig(
             r=args.lora_r,
@@ -296,18 +330,18 @@ def main():
     train_ds, valid_ds, test_ds = build_train_valid_test_datasets(args)
 
     train_steps = args.train_iters * args.global_batch_size // (args.per_device_train_batch_size * args.gradient_accumulation_steps) * args.num_train_epochs
-    print(f"[DEBUG] Total training steps: {train_steps}")
+    if DEBUG: print(f"[DEBUG] Total training steps: {train_steps}")
     
     # Create and configure model
     model = create_and_configure_model(args)
 
     vocab_size = model.get_input_embeddings().weight.shape[0]
-    print("Embedding vocab size:", vocab_size)
+    if DEBUG: print("Embedding vocab size:", vocab_size)
     
     # Setup training arguments
     parser = HfArgumentParser(TrainingArguments)
     training_args = parser.parse_dict(args.__dict__, allow_extra_keys=True)[0]
-    print(f"[DEBUG] Training arguments: {training_args}")
+    if DEBUG: print(f"[DEBUG] Training arguments: {training_args}")
     
     # Initialize wandb if specified
     is_main_process = torch.distributed.get_rank() == 0
@@ -321,28 +355,30 @@ def main():
         except Exception as e:
             logger.warning(f"Failed to initialize wandb: {e}. Continuing without wandb.")
 
-    # Create trainer
-    trainer = ScheduledSamplingTrainer(
-        model=model,
-        tokenizer=_GLOBAL_TOKENIZER,
-        args=training_args,
-        train_dataset=train_ds,
-        eval_dataset=valid_ds,
-        data_collator=default_data_collator,
-        initial_prob=1.0, 
-        final_prob=0.5, 
-        total_steps=train_steps,
-    )
-
-    # # Create trainer
-    # trainer = Trainer(
-    #     model=model,
-    #     tokenizer=_GLOBAL_TOKENIZER,
-    #     args=training_args,
-    #     train_dataset=train_ds,
-    #     eval_dataset=valid_ds,
-    #     data_collator=default_data_collator,
-    # )
+    trainer = None
+    if args.schedule_sampling:
+        if DEBUG: print(f"[DEBUG] Schedule sampling trainer")
+        trainer = ScheduledSamplingTrainer(
+            model=model,
+            tokenizer=_GLOBAL_TOKENIZER,
+            args=training_args,
+            train_dataset=train_ds,
+            eval_dataset=valid_ds,
+            data_collator=default_data_collator,
+            initial_prob=1.0, 
+            final_prob=0.5, 
+            total_steps=train_steps,
+        )
+    else:
+        if DEBUG: print(f"[DEBUG] Default trainer")
+        trainer = Trainer(
+            model=model,
+            tokenizer=_GLOBAL_TOKENIZER,
+            args=training_args,
+            train_dataset=train_ds,
+            eval_dataset=valid_ds,
+            data_collator=default_data_collator,
+        )
     
     # Start training
     logger.info("Starting training...")

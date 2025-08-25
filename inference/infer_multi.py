@@ -536,50 +536,47 @@ def post_process_codes(stage2_result, track_name):
 
 
 def stage1_pipeline(prompt_track_name):
-    start_audio_prompt_path = os.path.join(audio_prompts_dir_path, prompt_track_name + '.beginning.mp3')
-    end_audio_prompt_path = os.path.join(audio_prompts_dir_path, prompt_track_name + '.end.mp3')
+    try:
+        start_audio_prompt_path = os.path.join(audio_prompts_dir_path, prompt_track_name + '.beginning.mp3')
+        end_audio_prompt_path = os.path.join(audio_prompts_dir_path, prompt_track_name + '.end.mp3')
 
-    print(f"[DEBUG] Start prompt track path: {start_audio_prompt_path}")
-    print(f"[DEBUG] Prompt track name: {prompt_track_name}")
-    track_infos = None
-    
-    with open(args.track_info_json) as f:
-        track_infos = json.load(f)['infos']
+        print(f"[DEBUG] Start prompt track path: {start_audio_prompt_path}")
+        print(f"[DEBUG] Prompt track name: {prompt_track_name}")
+        track_infos = None
+        
+        with open(args.track_info_json) as f:
+            track_infos = json.load(f)['infos']
 
-    genres = get_genre_str(prompt_track_name, track_infos)
-    instruction = gen_ICL_trans_gen_instruction(start_audio_prompt_path, args.gen_duration)
+        genres = get_genre_str(prompt_track_name, track_infos)
+        instruction = gen_ICL_trans_gen_instruction(start_audio_prompt_path, args.gen_duration)
 
-    # Call the function and print the result
-    stage1_output_set = stage1_inference(model, 
-                                        instruction,
-                                        start_audio_prompt_path,
-                                        end_audio_prompt_path,
-                                        prompt_track_name,
-                                        genres, 
-                                        lyrics, 
-                                        0.93, 
-                                        1.0)
-    return (prompt_track_name, stage1_output_set)
+        # Call the function and print the result
+        stage1_output_set = stage1_inference(model, 
+                                            instruction,
+                                            start_audio_prompt_path,
+                                            end_audio_prompt_path,
+                                            prompt_track_name,
+                                            genres, 
+                                            lyrics, 
+                                            0.93, 
+                                            1.0)
+        return (prompt_track_name, stage1_output_set)
+    except Exception as e:
+        print(f"[ERROR] Error stage 1 generation for track {prompt_track_name}: {e}")
 
-def stage2_and_post_proc_pipeline(stage1_output_set, track_name):
-    model_stage2 = AutoModelForCausalLM.from_pretrained(
-        stage2_model, 
-        torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
-        # device_map="auto",
-        )
-    model_stage2.to(device)
-    model_stage2.eval()
-
-    if torch.__version__ >= "2.0.0":
-        model_stage2 = torch.compile(model_stage2)
+def stage2_and_post_proc_pipeline(model_stage2, stage1_output_set, track_name):
+    try:
+        if torch.__version__ >= "2.0.0":
+            model_stage2 = torch.compile(model_stage2)
 
 
-    stage2_result = stage2_inference(model_stage2, stage1_output_set, track_name, batch_size=args.stage2_batch_size)
-    print(stage2_result)
-    print('Stage 2 DONE.\n')
+        stage2_result = stage2_inference(model_stage2, stage1_output_set, track_name, batch_size=args.stage2_batch_size)
+        print(stage2_result)
+        print('Stage 2 DONE.\n')
 
-    post_process_codes(stage2_result, track_name)
+        post_process_codes(stage2_result, track_name)
+    except Exception as e:
+        print(f"[ERROR] Error stage 2 generation and post process for track {track_name}: {e}")
 
 
 audio_prompts_dir_path = args.audio_prompts_dir_path
@@ -605,7 +602,7 @@ print(f"[DEBUG] Track names: {prompt_track_names}")
 stage1_output_sets = {}
 if __name__ == "__main__":
     #stage 1 inference loop
-    with ProcessPoolExecutor(max_workers = 4) as executor:
+    with ProcessPoolExecutor(max_workers = 2) as executor:
         futures = [
             executor.submit(stage1_pipeline, prompt_track_name) 
             for prompt_track_name in prompt_track_names
@@ -623,10 +620,20 @@ if __name__ == "__main__":
 
     print("Stage 2 inference...")
 
+    #load stage 2 model
+    model_stage2 = AutoModelForCausalLM.from_pretrained(
+        stage2_model, 
+        torch_dtype=torch.bfloat16,
+        attn_implementation="flash_attention_2",
+        # device_map="auto",
+        )
+    model_stage2.to(device)
+    model_stage2.eval()
+
     #stage 2 inference and post processing loop
-    with ProcessPoolExecutor(max_workers = 4) as executor:
+    with ProcessPoolExecutor(max_workers = 2) as executor:
         futures = [
-            executor.submit(stage2_and_post_proc_pipeline, stage1_output_set, track_name)
+            executor.submit(stage2_and_post_proc_pipeline, model_stage2, stage1_output_set, track_name)
             for track_name, stage1_output_set in stage1_output_sets.items()
         ]
    

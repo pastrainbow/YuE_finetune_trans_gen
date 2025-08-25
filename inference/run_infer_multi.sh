@@ -17,7 +17,7 @@ python infer_multi.py \
     --lyrics_txt ../prompt_egs/lyrics.txt \
     --run_n_segments 2 \
     --stage2_batch_size 4 \
-    --output_dir ../output \
+    --output_dir /homes/al4624/Documents/YuE_finetune/inference_testing_dataset/generated \
     --repetition_penalty 1.1
 
 # python infer_original.py \
