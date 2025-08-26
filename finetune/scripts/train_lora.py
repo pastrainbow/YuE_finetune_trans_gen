@@ -48,89 +48,49 @@ def find_tensor_sub_seq(batch_ids, sub_seq_ids):
     return positions
 
 class ScheduledSamplingTrainer(Trainer):
-    def __init__(self, *args, initial_prob=1.0, final_prob=0.5, total_steps=10000, teacher_force=False, **kwargs):
+    def __init__(self, *args, 
+                 initial_prob=1.0, 
+                 final_prob=0.5, 
+                 total_steps=10000,
+                 decay='exponential', 
+                 teacher_force=False,
+                 sor_token_ids=None,
+                 eor_token_ids=None,
+                 sep_id=None,
+                 **kwargs):
+        assert initial_prob >= final_prob
         self.initial_prob = initial_prob
         self.final_prob = final_prob
         self.total_steps = total_steps
+        self.decay = decay
         self.teacher_force = teacher_force
         self.current_step = 0
+        if sor_token_ids:
+            self.sor_ids_tensor = torch.tensor(sor_token_ids, dtype=torch.int)
+        if eor_token_ids:
+            self.eor_ids_tensor = torch.tensor(eor_token_ids, dtype=torch.int)
+        if sep_id:
+            self.sep_id = sep_id
         super().__init__(*args, **kwargs)
 
     def _get_teacher_forcing_prob(self):
-        """Exponential decay for teacher forcing probability."""
-        decay_rate = (self.final_prob / self.initial_prob) ** (1/self.total_steps)
-        return max(self.final_prob, self.initial_prob * (decay_rate ** self.current_step))
-
-    # def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
-    #     #Update schedule sampling params
-    #     self.current_step += 1
-    #     teacher_prob = self._get_teacher_forcing_prob()
-
-    #     #get inputs
-    #     inputs = self._prepare_inputs(inputs)
-    #     input_ids = inputs["input_ids"]  # shape: [B, T], dtype: long/int
-
-    #     # Reset peak memory stats so we can see per-step peaks
-    #     if torch.cuda.is_available():
-    #         torch.cuda.reset_peak_memory_stats()
-
-    #     # ---------- Scheduled sampling (no-grad, inference_mode = leanest) ----------
-    #     if teacher_prob < 1.0 and self.state.global_step > 0:
-    #         # 1) get next-token predictions WITHOUT creating autograd history *and* with minimal overhead
-    #         with torch.inference_mode(), torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
-    #             ss_out = model(**inputs)
-    #             # ss_out.logits: [B, T, V]
-    #             sampled_ids = ss_out.logits.argmax(dim=-1).to(torch.int32)  # [B, T]
-    #         # Immediately free the large logits tensor
-    #         del ss_out
-
-    #         # 2) In-place mixing to avoid new big tensors (no torch.where on full matrix)
-    #         #    mask on CUDA (no CPU roundtrip), then selectively overwrite positions.
-    #         #    This keeps only *one* clone of input_ids.
-    #         mask = (torch.rand_like(input_ids, dtype=torch.float32) > teacher_prob).bool()  # [B, T] on device
-    #         if mask.any():
-    #             # Shift sampled ids (teacher forcing only applies from pos 1)
-    #             # Create a small, temporary view; avoid building a whole "shifted" copy if mask is sparse
-    #             # Make a working copy of input_ids only if we actually modify it
-    #             mixed = input_ids.clone()  # one clone for the whole step
-
-    #             # Target tokens that will replace positions 1..T-1
-    #             tgt = sampled_ids[:, :-1].to(device=input_ids.device, dtype=input_ids.dtype)
-
-    #             m = mask[:, 1:]  # only positions that can be replaced
-    #             if m.any():
-    #                 mixed[:, 1:][m] = tgt[m]
-
-    #             inputs["input_ids"] = mixed
-    #             # free temps
-    #             del mixed, tgt
-    #         # free temps
-    #         del sampled_ids, mask
-
-    #     # ---------- Main forward (with grad) ----------
-    #     with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
-    #         out = model(**inputs)
-    #     loss = out.loss
-
-    #     # Cleanup *now* so trainer logging/accumulation won't hold onto tensors
-    #     del out
-    #     del inputs
-    #     torch.cuda.empty_cache()
-
-    #     # Optional: print mem stats every N steps
-    #     if torch.cuda.is_available() and (self.current_step % 10 == 0 or self.current_step < 5):
-    #         alloc_mb = torch.cuda.memory_allocated() / 1024**2
-    #         reserv_mb = torch.cuda.memory_reserved() / 1024**2
-    #         peak_mb  = torch.cuda.max_memory_allocated() / 1024**2
-    #         stats = torch.cuda.memory_stats()
-    #         active   = stats.get("active_bytes.all.current", 0) / 1024**2
-    #         inactive = stats.get("inactive_split_bytes.all.current", 0) / 1024**2  # fragmentation proxy
-    #         print(
-    #             f"[Step {self.current_step}] "
-    #             f"alloc={alloc_mb:.1f}MB | reserved={reserv_mb:.1f}MB | peak={peak_mb:.1f}MB | "
-    #             f"active={active:.1f}MB | inactive_split={inactive:.1f}MB"
-    #         )
-    #     return loss.detach()
+        if self.current_step >= self.total_steps:
+            return self.final_prob
+        
+        if self.decay == 'exponential':
+            # if DEBUG: print(f"[DEBUG] Exponential decay")
+            #Exponential decay
+        
+            decay_factor = (self.final_prob / self.initial_prob) ** (self.current_step / self.total_steps)
+            if DEBUG: print(f"Teacher force prob: {self.initial_prob * decay_factor}")
+            return self.initial_prob * decay_factor
+        elif self.decay == 'linear':
+            # if DEBUG: print(f"[DEBUG] Linear decay")
+            #Linear decay
+            decay = (self.initial_prob - self.final_prob) * (self.current_step / self.total_steps)
+            return self.initial_prob - decay
+        else:
+            raise ValueError(f"[ERROR] Decay type {self.decay} does not exist! Can only be either linear or exponential.")
 
     def _get_teacher_force_mask(self, input_ids):
         sor_ids_tensor = self.sor_ids_tensor.to(input_ids.device)
@@ -171,47 +131,70 @@ class ScheduledSamplingTrainer(Trainer):
         inputs = self._prepare_inputs(inputs)
         input_ids = inputs["input_ids"]
 
-        labels = inputs.pop("labels")
+        #Get here, since we need the labels for forward pass
+        # labels = inputs.get("labels")
+
+            # Reset peak memory stats so we can see per-step peaks
+    #     if torch.cuda.is_available():
+    #         torch.cuda.reset_peak_memory_stats()
 
         # --- Scheduled sampling branch ---
         if teacher_prob < 1.0 and self.state.global_step > 0:
-            with torch.inference_mode(), torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with torch.inference_mode(): #This is better than no_grad
                 ss_out = model(**inputs)
                 sampled_ids = ss_out.logits.argmax(dim=-1).to(torch.int32)
-
-            del ss_out  # free memory
+                del ss_out
 
             # Random mask of positions to replace with model predictions
             mask = (torch.rand_like(input_ids, dtype=torch.float32) > teacher_prob).bool()
 
             if mask.any():
                 mixed = input_ids.clone()
+                #The model output is shifted right by one step, so we need to shift back
                 tgt = sampled_ids[:, :-1].to(device=input_ids.device, dtype=input_ids.dtype)
                 m = mask[:, 1:]
                 if m.any():
-                    mixed[:, 1:][m] = tgt[m]
+                    #Mixed starts with one ground truth token as the initiation
+                    mixed[:, 1:][m] = tgt[m] 
                 inputs["input_ids"] = mixed
-
+                del mixed, tgt
             del sampled_ids, mask
 
         # --- Forward pass with grad ---
-        with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
-            outputs = model(**inputs)
+        outputs = model(**inputs)
 
         loss = None
 
         if self.teacher_force:
-            if DEBUG: print(f"[DEBUG] Prompt teacher forcing")
-            teacher_force_mask = self._get_teacher_force_mask(input_ids)
-            labels = labels.masked_fill(teacher_force_mask, -100)
-            loss = torch.nn.functional.cross_entropy(
-                outputs.logits.view(-1, outputs.logits.size(-1)),
-                labels.view(-1),
-                ignore_index=-100
-            )
+            # if DEBUG: print(f"[DEBUG] Prompt teacher forcing")
+            # teacher_force_mask = self._get_teacher_force_mask(input_ids)
+            # labels = labels.masked_fill(teacher_force_mask, -100)
+            # loss = torch.nn.functional.cross_entropy(
+            #     outputs.logits.view(-1, outputs.logits.size(-1)),
+            #     labels.view(-1),
+            #     ignore_index=-100
+            # )
+            raise ValueError('Prompt teacher forcing not supported yet!')
         else:
-            if DEBUG: print(f"[DEBUG] No prompt teacher forcing")
+            # if DEBUG: print(f"[DEBUG] No prompt teacher forcing")
             loss = outputs.loss
+
+        del inputs
+        torch.cuda.empty_cache()
+
+         # Optional: print mem stats every N steps
+    #     if torch.cuda.is_available() and (self.current_step % 10 == 0 or self.current_step < 5):
+    #         alloc_mb = torch.cuda.memory_allocated() / 1024**2
+    #         reserv_mb = torch.cuda.memory_reserved() / 1024**2
+    #         peak_mb  = torch.cuda.max_memory_allocated() / 1024**2
+    #         stats = torch.cuda.memory_stats()
+    #         active   = stats.get("active_bytes.all.current", 0) / 1024**2
+    #         inactive = stats.get("inactive_split_bytes.all.current", 0) / 1024**2  # fragmentation proxy
+    #         print(
+    #             f"[Step {self.current_step}] "
+    #             f"alloc={alloc_mb:.1f}MB | reserved={reserv_mb:.1f}MB | peak={peak_mb:.1f}MB | "
+    #             f"active={active:.1f}MB | inactive_split={inactive:.1f}MB"
+    #         )
 
         return (loss, outputs) if return_outputs else loss
 
@@ -432,6 +415,7 @@ def main():
             initial_prob=1.0, 
             final_prob=0.5, 
             total_steps=train_steps,
+            decay=args.scheduled_sampling_decay,
             teacher_force=args.prompt_teacher_force,
         )
     else:
