@@ -361,6 +361,9 @@ def create_and_configure_model(args):
 
 
 def main():
+
+
+
     # Setup distributed training
     local_rank = setup_distributed_training()
     
@@ -376,15 +379,25 @@ def main():
     # Build datasets
     train_ds, valid_ds, test_ds = build_train_valid_test_datasets(args)
 
+    if DEBUG:
+        for i in range(3):
+            ex = train_ds[i]
+            print("[DEBUG] Unique labels:", torch.unique(ex["labels"], return_counts=True))
+
+
     train_steps = args.train_iters * args.global_batch_size // (args.per_device_train_batch_size * args.gradient_accumulation_steps) * args.num_train_epochs
     if DEBUG: print(f"[DEBUG] Total training steps: {train_steps}")
     
     # Create and configure model
     model = create_and_configure_model(args)
 
+    # TESTING: Model embedding size and tokenizer vocab size are different, so we align them
+    model.resize_token_embeddings(len(_GLOBAL_TOKENIZER))
+
     vocab_size = model.get_input_embeddings().weight.shape[0]
     if DEBUG: print("Embedding vocab size:", vocab_size)
     
+
     # Setup training arguments
     parser = HfArgumentParser(TrainingArguments)
     training_args = parser.parse_dict(args.__dict__, allow_extra_keys=True)[0]
@@ -412,8 +425,8 @@ def main():
             train_dataset=train_ds,
             eval_dataset=valid_ds,
             data_collator=default_data_collator,
-            initial_prob=1.0, 
-            final_prob=0.5, 
+            initial_prob=0.5, 
+            final_prob=0.1, 
             total_steps=train_steps,
             decay=args.scheduled_sampling_decay,
             teacher_force=args.prompt_teacher_force,
@@ -429,6 +442,10 @@ def main():
             data_collator=default_data_collator,
         )
     
+    if DEBUG: print("[DEBUG] Tokenizer vocab:", len(_GLOBAL_TOKENIZER))
+    if DEBUG: print("[DEBUG] Model embeddings:", model.get_input_embeddings().weight.size(0))
+
+
     # Start training
     logger.info("Starting training...")
     trainer.train()
