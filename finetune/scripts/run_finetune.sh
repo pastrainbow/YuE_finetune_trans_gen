@@ -115,13 +115,13 @@ PER_DEVICE_EVAL_BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
 SEQ_LENGTH=5000 #each 30s track training sequence has length of around 4800 tokens, 5000 should thus cover a whole sequence
-TRAIN_ITERS=15919
+TRAIN_ITERS=2654
 NUM_TRAIN_EPOCHS=1 #Training time is way too long with more epochs at batch size of 1
 
 DATALOADER_NUM_WORKERS=4
 
 # Data paths (replace with your actual paths)
-DATA_PATH="79599603 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
+DATA_PATH="13270614 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
 DATA_CACHE_PATH="/vol/bitbucket/al4624/model_output/finetune_cache/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split
@@ -129,7 +129,7 @@ DATA_SPLIT="900,50,50"
 
 # Model configuration
 TOKENIZER_MODEL_PATH="../inference/mm_tokenizer_v0.2_hf/tokenizer.model"
-MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-icl"
+MODEL_NAME="m-a-p/YuE-s1-7B-anneal-zh-icl"
 MODEL_CACHE_DIR="/vol/bitbucket/al4624/cache/finetune_cache/model_cache"
 OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
 DEEPSPEED_CONFIG=config/ds_config_zero2.json

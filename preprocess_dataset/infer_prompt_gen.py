@@ -7,11 +7,15 @@ from functools import partial
 import json
 import ast
 
-track_path = "/homes/al4624/Documents/YuE_finetune/inference_testing_dataset/full_audio"
-seg_split_dir_path = "/homes/al4624/Documents/YuE_finetune/inference_testing_dataset/split_audio_prompts"
-track_info_json_path = "/homes/al4624/Documents/YuE_finetune/inference_testing_dataset/track_info/info.json" 
-file_paths = [str(file) for file in Path(track_path).glob('*.mp3') if file.is_file()]
+# track_path = "/homes/al4624/Documents/YuE_finetune/inference_testing_dataset/full_audio"
+# seg_split_dir_path = "/homes/al4624/Documents/YuE_finetune/inference_testing_dataset/split_audio_prompts"
+# track_info_json_path = "/homes/al4624/Documents/YuE_finetune/inference_testing_dataset/track_info/info.json" 
+# file_paths = [str(file) for file in Path(track_path).glob('*.mp3') if file.is_file()]
 
+track_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/eval"
+seg_split_dir_path = "/vol/bitbucket/al4624/eval_dataset/split_segments"
+track_info_json_path = "/vol/bitbucket/al4624/eval_dataset/info/info.json" 
+file_paths = [str(file) for file in Path(track_path).rglob('*.mp3') if file.is_file()]
 
 
 # -------- Load track and genre data once --------
@@ -47,6 +51,7 @@ def split_file(file_path):
         beginning_segment_end = segment_frame_count
         end_segment_start = segment_frame_count * 2
         audio_data_beginning = audio_data[ : beginning_segment_end]
+        audio_data_middle = audio_data[beginning_segment_end : end_segment_start]
         audio_data_end = audio_data[end_segment_start : ]
 
         info_json["track_name"] = track_name
@@ -55,7 +60,7 @@ def split_file(file_path):
         info_json["endpoint_2"] = end_segment_start / sample_rate
         
         sf.write(os.path.join(seg_split_dir_path, track_name + ".beginning.mp3"), audio_data_beginning, sample_rate)
-
+        sf.write(os.path.join(seg_split_dir_path, track_name + ".middle.mp3"), audio_data_middle, sample_rate)
         sf.write(os.path.join(seg_split_dir_path, track_name + ".end.mp3"), audio_data_end, sample_rate)
 
         print(f"Track {track_name} finished splitting.")
@@ -64,7 +69,7 @@ def split_file(file_path):
     #FMA dataset has corrupted files. It is normal for a few files to fail the processing.
     except Exception as e:
         print(f"Error processing {file_path}: {e}. Skipping")
-        raise
+        return None
 
 
 def parallel_splitting():

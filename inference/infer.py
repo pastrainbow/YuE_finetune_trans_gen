@@ -87,19 +87,19 @@ seed_everything(args.seed)
 device = torch.device(f"cuda:{cuda_idx}" if torch.cuda.is_available() else "cpu")
 mmtokenizer = _MMSentencePieceTokenizer("./mm_tokenizer_v0.2_hf/tokenizer.model")
 
-print(f"[DEBUG] EOS token id: {mmtokenizer.eoa}, PAD token id: {mmtokenizer.eoa}, BOS token id: {mmtokenizer.bos}, SOA token id: {mmtokenizer.soa}, EOA token id: {mmtokenizer.eoa}")
+# print(f"[DEBUG] EOS token id: {mmtokenizer.eoa}, PAD token id: {mmtokenizer.eoa}, BOS token id: {mmtokenizer.bos}, SOA token id: {mmtokenizer.soa}, EOA token id: {mmtokenizer.eoa}")
 
-token = mmtokenizer.detokenize([32016])
-print(f"[DEBUG] 32016: {token}")
+# token = mmtokenizer.detokenize([32016])
+# print(f"[DEBUG] 32016: {token}")
 
-token = mmtokenizer.detokenize([45798])
-print(f"[DEBUG] 45798: {token}")
+# token = mmtokenizer.detokenize([45798])
+# print(f"[DEBUG] 45798: {token}")
 
-eor =  mmtokenizer.tokenize("[end_of_reference]")
-print(f"[DEBUG] EOR: {eor}")
+# eor =  mmtokenizer.tokenize("[end_of_reference]")
+# print(f"[DEBUG] EOR: {eor}")
 
-sor =  mmtokenizer.tokenize("[start_of_reference]")
-print(f"[DEBUG] SOR: {sor}")
+# sor =  mmtokenizer.tokenize("[start_of_reference]")
+# print(f"[DEBUG] SOR: {sor}")
 
 model = AutoModelForCausalLM.from_pretrained(
     stage1_model, 

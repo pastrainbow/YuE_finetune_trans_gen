@@ -392,7 +392,7 @@ def main():
     model = create_and_configure_model(args)
 
     # TESTING: Model embedding size and tokenizer vocab size are different, so we align them
-    model.resize_token_embeddings(len(_GLOBAL_TOKENIZER))
+    # model.resize_token_embeddings(len(_GLOBAL_TOKENIZER))
 
     vocab_size = model.get_input_embeddings().weight.shape[0]
     if DEBUG: print("Embedding vocab size:", vocab_size)
