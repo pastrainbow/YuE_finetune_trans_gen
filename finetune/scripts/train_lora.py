@@ -302,18 +302,18 @@ def core_gpt_dataset_config_from_args(args):
 def _build_tokenizer(args):
     """Initialize tokenizer."""
     global _GLOBAL_TOKENIZER
-    global _SOR_IDS
-    global _EOR_IDS
-    global _SEP_ID
+    # global _SOR_IDS
+    # global _EOR_IDS
+    # global _SEP_ID
     logger.info(f"Loading tokenizer from {args.model_name_or_path}")
     _GLOBAL_TOKENIZER = AutoTokenizer.from_pretrained(
                             args.model_name_or_path, 
                             model_max_length=args.model_max_length, 
                             padding_side="right")
     
-    _SOR_IDS=_GLOBAL_TOKENIZER.encode('[start_of_reference]', add_special_tokens=False)
-    _EOR_IDS=_GLOBAL_TOKENIZER.encode('[end_of_reference]', add_special_tokens=False)
-    _SEP_ID=_GLOBAL_TOKENIZER.convert_tokens_to_ids(['<xcodec>'])[0]
+    # _SOR_IDS=_GLOBAL_TOKENIZER.encode('[start_of_reference]', add_special_tokens=False)
+    # _EOR_IDS=_GLOBAL_TOKENIZER.encode('[end_of_reference]', add_special_tokens=False)
+    # _SEP_ID=_GLOBAL_TOKENIZER.convert_tokens_to_ids(['<xcodec>'])[0]
 
     return _GLOBAL_TOKENIZER
 
@@ -519,17 +519,17 @@ def main():
 
     if args.prompt_loss_mask:
         if DEBUG: print(f"[DEBUG] Prompt loss masking trainer")
-        trainer = PromptMaskTrainer(
-            model=model,
-            tokenizer=_GLOBAL_TOKENIZER,
-            args=training_args,
-            train_dataset=train_ds,
-            eval_dataset=valid_ds,
-            data_collator=default_data_collator,
-            sor_token_ids=_SOR_IDS,
-            eor_token_ids=_EOR_IDS,
-            sep_id=_SEP_ID,
-        )
+        # trainer = PromptMaskTrainer(
+        #     model=model,
+        #     tokenizer=_GLOBAL_TOKENIZER,
+        #     args=training_args,
+        #     train_dataset=train_ds,
+        #     eval_dataset=valid_ds,
+        #     data_collator=default_data_collator,
+        #     sor_token_ids=_SOR_IDS,
+        #     eor_token_ids=_EOR_IDS,
+        #     sep_id=_SEP_ID,
+        # )
     else:
         if DEBUG: print(f"[DEBUG] Default trainer")
         trainer = Trainer(
