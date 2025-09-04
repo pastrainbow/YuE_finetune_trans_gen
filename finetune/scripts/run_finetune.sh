@@ -110,12 +110,12 @@ MASTER_PORT=9999
 # export CUDA_VISIBLE_DEVICES=4,5,6,7
 
 # Training hyperparameters
-PER_DEVICE_TRAIN_BATCH_SIZE=8 #4 is fine on 80G VRAM. 1 can run on 48G
-PER_DEVICE_EVAL_BATCH_SIZE=8
+PER_DEVICE_TRAIN_BATCH_SIZE=4 #4 is fine on 80G VRAM. 1 can run on 48G
+PER_DEVICE_EVAL_BATCH_SIZE=4
 GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
 SEQ_LENGTH=5000 #each 30s track training sequence has length of around 4800 tokens, 5000 should thus cover a whole sequence
-TRAIN_ITERS=1989
+TRAIN_ITERS=3979
 NUM_TRAIN_EPOCHS=1 #Training time is way too long with more epochs at batch size of 1
 
 DATALOADER_NUM_WORKERS=4
@@ -216,7 +216,6 @@ CMD="torchrun --nproc_per_node=$NUM_GPUS --master_port=$MASTER_PORT scripts/trai
     --finetune \
     --learning-rate $LEARNING_RATE \
     --scheduled-sampling-decay $SCHEDULED_SAMPLING_DECAY \
-    --prompt-loss-mask \
     --dataloader-num-workers $DATALOADER_NUM_WORKERS \
     --deepspeed $DEEPSPEED_CONFIG"
 
