@@ -24,6 +24,9 @@ from core.datasets.gpt_dataset import GPTDatasetConfig, GPTDataset
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+DEBUG = True
+torch.set_printoptions(threshold=float('inf'), edgeitems=None, linewidh=200)
+
 _GLOBAL_TOKENIZER = None
 
 def find_tensor_sub_seq(batch_ids, sub_seq_ids):    
@@ -42,9 +45,8 @@ def find_tensor_sub_seq(batch_ids, sub_seq_ids):
                     break
     return positions
 
-class ScheduledSamplingTrainer(Trainer):
-    def __init__(self, *args, sor_token_ids=None, eor_token_ids=None, sep_id=69, **kwargs):
-        #WARNING: lazy fix, need better solution for multi gpu training
+class InpaintTrainer(Trainer):
+    def __init__(self, *args, sor_token_ids=None, eor_token_ids=None, sep_id=None, **kwargs):
         self.sor_ids_tensor = torch.tensor(sor_token_ids, dtype=torch.int)
         self.eor_ids_tensor = torch.tensor(eor_token_ids, dtype=torch.int)
         #We also need to teacher force the xcodec marker token, since we know this token can mess up the model 
@@ -56,6 +58,9 @@ class ScheduledSamplingTrainer(Trainer):
         super().__init__(*args, **kwargs)
 
     def _get_teacher_force_mask(self, input_ids):
+
+        if DEBUG: print(f"[DEBUG] input ids: {input_ids}")
+
         sor_ids_tensor = self.sor_ids_tensor.to(input_ids.device)
         eor_ids_tensor = self.eor_ids_tensor.to(input_ids.device)
 
@@ -84,9 +89,11 @@ class ScheduledSamplingTrainer(Trainer):
 
         teacher_force_mask = prompt_mask | sep_mask
 
+        if DEBUG: print(f"[DEBUG] teacher force mask: {teacher_force_mask}")
+
         return teacher_force_mask
 
-    def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         # Prepare inputs
         inputs = self._prepare_inputs(inputs)
         input_ids = inputs["input_ids"]
@@ -106,7 +113,29 @@ class ScheduledSamplingTrainer(Trainer):
             ignore_index=-100
         )
         
-        return loss
+        return (loss, outputs) if return_outputs else loss
+
+    # def training_step(self, model, inputs, num_items_in_batch=None, **kwargs):
+    #     # Prepare inputs
+    #     inputs = self._prepare_inputs(inputs)
+    #     input_ids = inputs["input_ids"]
+    #     # attention_mask = inputs.get("attention_mask", None)
+    #     labels = inputs.get("labels", input_ids.clone())
+        
+    #     teacher_force_mask = self._get_teacher_force_mask(input_ids)
+
+    #     # Forward pass with teacher forcing
+    #     outputs = model(**inputs)
+        
+    #     #Mask loss for teacher force tokens
+    #     labels = labels.masked_fill(teacher_force_mask, -100)
+    #     loss = torch.nn.functional.cross_entropy(
+    #         outputs.logits.view(-1, outputs.logits.size(-1)),
+    #         labels.view(-1),
+    #         ignore_index=-100
+    #     )
+        
+    #     return loss
 
 def is_dataset_built_on_rank():
     # return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0

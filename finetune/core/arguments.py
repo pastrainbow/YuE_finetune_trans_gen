@@ -825,6 +825,8 @@ def _add_finetune_args(parser):
                        help='Enable teacher forcing of ICL prompt tokens')
     group.add_argument('--scheduled-sampling-decay', type=str, choices=['linear', 'exponential'],
                        help='Type of probability decay to use for scheduled sampling')
+    group.add_argument('--prompt-loss-mask', action='store_true',
+                       help='Enable ICL prompt loss masking')
     
     # LoRA parameters
     group.add_argument('--lora-r', type=int, default=64,

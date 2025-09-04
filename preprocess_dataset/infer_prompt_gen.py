@@ -13,6 +13,7 @@ import ast
 # file_paths = [str(file) for file in Path(track_path).glob('*.mp3') if file.is_file()]
 
 track_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/eval"
+inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep"
 seg_split_dir_path = "/vol/bitbucket/al4624/eval_dataset/split_segments"
 track_info_json_path = "/vol/bitbucket/al4624/eval_dataset/info/info.json" 
 file_paths = [str(file) for file in Path(track_path).rglob('*.mp3') if file.is_file()]
@@ -43,8 +44,15 @@ def split_file(file_path):
         
         info_json = {}
         
+        inst_track_path = os.path.join(inst_track_dir_path, track_name + '.Instrumental.mp3')
+
+        if not os.path.exists(inst_track_path):
+            print(f"[ERROR] Instrumental track for track {track_name} does not exist! Skipping")
+            return None
+        
+
         #each sample value is from -1 to 1
-        audio_data, sample_rate = sf.read(file_path)
+        audio_data, sample_rate = sf.read(inst_track_path)
         frame_count = len(audio_data)
         #split to 3 segments: start, middle and end
         segment_frame_count = int(frame_count / 3)
@@ -59,9 +67,9 @@ def split_file(file_path):
         info_json["endpoint_1"] = beginning_segment_end / sample_rate
         info_json["endpoint_2"] = end_segment_start / sample_rate
         
-        sf.write(os.path.join(seg_split_dir_path, track_name + ".beginning.mp3"), audio_data_beginning, sample_rate)
-        sf.write(os.path.join(seg_split_dir_path, track_name + ".middle.mp3"), audio_data_middle, sample_rate)
-        sf.write(os.path.join(seg_split_dir_path, track_name + ".end.mp3"), audio_data_end, sample_rate)
+        sf.write(os.path.join(seg_split_dir_path, track_name + ".Instrumental.beginning.mp3"), audio_data_beginning, sample_rate)
+        sf.write(os.path.join(seg_split_dir_path, track_name + ".Instrumental.middle.mp3"), audio_data_middle, sample_rate)
+        sf.write(os.path.join(seg_split_dir_path, track_name + ".Instrumental.end.mp3"), audio_data_end, sample_rate)
 
         print(f"Track {track_name} finished splitting.")
 
