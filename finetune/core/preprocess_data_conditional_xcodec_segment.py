@@ -90,17 +90,17 @@ class Encoder(EncoderBase):
 
         if not all(key in data for key in required_keys):
             mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
-            print(f"Warning: Missing required keys in data for {data.get('id', 'unknown')} {mode_str}. Skipping.")
-            print(f"Missing: {[k for k in required_keys if k not in data]}")
+            if DEBUG: print(f"Warning: Missing required keys in data for {data.get('id', 'unknown')} {mode_str}. Skipping.")
+            if DEBUG: print(f"Missing: {[k for k in required_keys if k not in data]}")
             return {}, {}, len(json_line)
         if not isinstance(data.get('splitted_lyrics'), dict) or 'segmented_lyrics' not in data['splitted_lyrics']:
-             mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
-             print(f"Warning: Invalid 'splitted_lyrics' format in data for {data.get('id', 'unknown')} {mode_str}. Skipping.")
-             return {}, {}, len(json_line)
+            mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
+            if DEBUG: print(f"Warning: Invalid 'splitted_lyrics' format in data for {data.get('id', 'unknown')} {mode_str}. Skipping.")
+            return {}, {}, len(json_line)
         if not data['splitted_lyrics']['segmented_lyrics']: # Check if segmented_lyrics is empty
-             mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
-             print(f"Warning: Empty 'segmented_lyrics' in data for {data.get('id', 'unknown')} {mode_str}. Skipping.")
-             return {}, {}, len(json_line)
+            mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
+            if DEBUG: print(f"Warning: Empty 'segmented_lyrics' in data for {data.get('id', 'unknown')} {mode_str}. Skipping.")
+            return {}, {}, len(json_line)
 
         segmented_lyrics = data['splitted_lyrics']['segmented_lyrics']
 
@@ -121,7 +121,7 @@ class Encoder(EncoderBase):
             #[Optional] filter out instrumentla sequences with dominating token
             token_portion_threshold = 0.1
             if get_max_item_freq(raw_codec_instrumental[0]) > token_portion_threshold * raw_codec_instrumental.shape[1]:
-                print(f"Warning: Skipping {data['id']} due to dominating token in instrumental codec.")
+                if DEBUG: print(f"Warning: Skipping {data['id']} due to dominating token in instrumental codec.")
                 return {}, {}, len(json_line)
 
             # Load mixture codec only if needed for ICL prompt or future use
@@ -157,7 +157,7 @@ class Encoder(EncoderBase):
                 if DEBUG: print(f"Adjusted codec shapes for {data['id']} due to difference {diff}. New length: {min_len}")
             else:
                 mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
-                print(f"Warning: Mismatch shape {raw_codec_vocals.shape} vs {raw_codec_instrumental.shape} for {data['id']} {mode_str}. Skipping.")
+                if DEBUG: print(f"Warning: Mismatch shape {raw_codec_vocals.shape} vs {raw_codec_instrumental.shape} for {data['id']} {mode_str}. Skipping.")
                 bytes_processed = len(json_line) + max(get_size_in_bytes(raw_codec_vocals), get_size_in_bytes(raw_codec_instrumental))
                 if raw_codec_mixture is not None: bytes_processed += get_size_in_bytes(raw_codec_mixture)
                 return {}, {}, bytes_processed
@@ -170,7 +170,7 @@ class Encoder(EncoderBase):
                  raw_codec_mixture = raw_codec_mixture[:, :raw_codec_instrumental.shape[1]]
                  if DEBUG: print(f"Adjusted mixture codec shape for {data['id']} to match vocals/instrumental.")
              else:
-                 print(f"Warning: Mixture codec shape {raw_codec_mixture.shape} mismatch with vocals/instrumental {raw_codec_instrumental.shape} for {data['id']} (ICL-CoT). Skipping.")
+                 if DEBUG: print(f"Warning: Mixture codec shape {raw_codec_mixture.shape} mismatch with vocals/instrumental {raw_codec_instrumental.shape} for {data['id']} (ICL-CoT). Skipping.")
                  bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental) + get_size_in_bytes(raw_codec_mixture)
                  return {}, {}, bytes_processed
 
@@ -179,7 +179,7 @@ class Encoder(EncoderBase):
         # Basic checks for validity
         if full_length_of_song <= 0 or raw_codec_vocals.ndim < 2 or raw_codec_vocals.shape[1] == 0:
              mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
-             print(f"Warning: Invalid audio length ({full_length_of_song}) or vocal codec shape ({raw_codec_vocals.shape}) for {data['id']} {mode_str}. Skipping.")
+             if DEBUG: print(f"Warning: Invalid audio length ({full_length_of_song}) or vocal codec shape ({raw_codec_vocals.shape}) for {data['id']} {mode_str}. Skipping.")
              # Calculate bytes processed before returning
              bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental)
              if raw_codec_mixture is not None: bytes_processed += get_size_in_bytes(raw_codec_mixture)
@@ -189,7 +189,7 @@ class Encoder(EncoderBase):
         # Relaxed fps check
         if fps > 51 or fps < 49:
             mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
-            print(f"fps={fps} is invalid for {data['id']} {mode_str}, skipping...")
+            if DEBUG: print(f"fps={fps} is invalid for {data['id']} {mode_str}, skipping...")
             # Calculate bytes processed before returning
             bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental)
             if raw_codec_mixture is not None: bytes_processed += get_size_in_bytes(raw_codec_mixture)
@@ -238,7 +238,7 @@ class Encoder(EncoderBase):
                  # Filter prompts with low variation, since dataset contains vocal only tracks, where instrumental track is only silence
                 min_unique_ratio = 0.1
                 if (len(np.unique(audio_prompt_codec_array)) < len(audio_prompt_codec_array) * min_unique_ratio):
-                    print(f"Warning: Skipping due to low variation ({len(np.unique(audio_prompt_codec_array))} unique) for {data['id']} with codec path {data['codec']}")
+                    if DEBUG: print(f"Warning: Skipping due to low variation ({len(np.unique(audio_prompt_codec_array))} unique) for {data['id']} with codec path {data['codec']}")
                     bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_noised_instrumental) 
                     return {}, {}, bytes_processed
 
@@ -307,7 +307,7 @@ class Encoder(EncoderBase):
                 if DEBUG: print(f"Segment frame too short in {data['id']}: length={frame_end - frame_start} (< {fps}), skipping...")
                 segment_valid = False
             if not segment_valid:
-                print(f"Warninig: {data['id']} has an invalid segment. Skipping.")
+                if DEBUG: print(f"Warninig: {data['id']} has an invalid segment. Skipping.")
                 bytes_processed = len(json_line) + get_size_in_bytes(raw_codec_noised_instrumental) + get_size_in_bytes(raw_codec_vocals) + get_size_in_bytes(raw_codec_instrumental)
                 return {}, {}, bytes_processed
 
@@ -340,7 +340,7 @@ class Encoder(EncoderBase):
                     raise TypeError("npy2ids did not return a list or ndarray for segment")
                 if len(vocals_ids_seg) != len(instrumental_ids_seg):
                      mode_str = "(ICL-CoT)" if self.args.use_audio_icl else ""
-                     print(f"Warning: Mismatch target vocal/inst IDs ({len(vocals_ids_seg)}/{len(instrumental_ids_seg)}) for {data['id']} {mode_str}. Skipping segment.")
+                     if DEBUG: print(f"Warning: Mismatch target vocal/inst IDs ({len(vocals_ids_seg)}/{len(instrumental_ids_seg)}) for {data['id']} {mode_str}. Skipping segment.")
                      continue
                 if len(vocals_ids_seg) == 0: # Skip empty segments
                     print(f"Skipping segment in {data['id']} because resulting codec IDs are empty.")

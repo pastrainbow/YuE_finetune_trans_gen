@@ -73,12 +73,12 @@ class PromptMaskTrainer(Trainer):
         prompt_complete_flags = (sor_positions < eor_positions).unsqueeze(1)
         seq_range = torch.arange(input_ids.size(1), device=input_ids.device).unsqueeze(0)
 
-        end_prompt_mask = (seq_range
-                            <= (eor_positions + len(eor_ids_tensor) - 1)
-                            .unsqueeze(1)).bool()
-        start_prompt_mask = (seq_range
-                        >= sor_positions
-                        .unsqueeze(1)).bool()
+        end_prompt_mask = ((eor_positions < input_ids.shape[-1]).unsqueeze(1)  #Eliminate sequences with no eor tokens
+                           & (seq_range <= (eor_positions + len(eor_ids_tensor) - 1).unsqueeze(1))
+                           .bool())
+        start_prompt_mask = ((sor_positions < input_ids.shape[-1]).unsqueeze(1) 
+                             & (seq_range >= sor_positions.unsqueeze(1))
+                             .bool())
 
         prompt_mask = torch.where(
             prompt_complete_flags, 
@@ -98,6 +98,7 @@ class PromptMaskTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         # Prepare inputs
         inputs = self._prepare_inputs(inputs)
+
         input_ids = inputs["input_ids"]
         # attention_mask = inputs.get("attention_mask", None)
         labels = inputs.get("labels", input_ids.clone())

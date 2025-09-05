@@ -20,6 +20,7 @@ genre_df = pd.read_csv(genre_df_path)
 parser = argparse.ArgumentParser()
 # Model Configuration:
 parser.add_argument("--audio_dir_path", type=str, help="Audio mixture directory for the tracks that will be included")
+parser.add_argument("--output_file_name", type=str, help="Output JSONL file name")
 args = parser.parse_args()
 audio_dir_path = args.audio_dir_path
 
@@ -33,7 +34,8 @@ audio_dir_path = args.audio_dir_path
 mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_mixture_codes"
 sep_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
 noised_inst_codes_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes"
-output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
+# output_jsonl_path = "/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/trans_gen.msa.xcodec_16k.jsonl"
+output_jsonl_path = f"/homes/al4624/Documents/YuE_finetune/YuE_finetune_trans_gen/finetune/example/jsonl/{args.output_file_name}.jsonl"
 
 start_lyrics = "[beginning]\n\n"
 middle_lyrics = "[middle]\n\n"

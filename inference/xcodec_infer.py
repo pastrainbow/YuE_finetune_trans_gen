@@ -109,6 +109,12 @@ def noise_encode(audio_path, signal_weight, code_dir_path, codec_model, device, 
 #determine encoding bandwidth
 parser = argparse.ArgumentParser()
 parser.add_argument("--num_quantizers", type=int, default=1, help="Number of quantizer layers to use for encoding")
+parser.add_argument("--inst", action='store_true', help="Whether to encode instrumental tracks")
+parser.add_argument("--vocals", action='store_true', help="Whether to encode vocal tracks")
+parser.add_argument("--mixture", action='store_true', help="Whether to encode mixture tracks")
+parser.add_argument("--noised_inst", action='store_true', help="Whether to encode noise instrumental tracks")
+parser.add_argument("--noise_levels", nargs="+", type=str, help="The list of noise levels to use for encoding") #we don't use float here to avoid precision issue
+
 args = parser.parse_args()
 encoder_bandwidth = args.num_quantizers * 0.5 #assuming 16000 Hz sample rate and 320 hop length, which is the original config for Xcodec
 print(f"[DEBUG] encoder target bandwidth is {encoder_bandwidth} kbps, with {args.num_quantizers} quantizer layers.")
@@ -131,48 +137,60 @@ sep_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep_codes"
 sep_track_paths = [str(file) for file in Path(sep_track_dir_path).glob('*.mp3') if file.is_file()]
 num_sep_track = len(sep_track_paths)
 
-# mixture_track_dir_path_root = "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/"
-# mixture_track_paths = [str(file) for file in Path(mixture_track_dir_path_root).rglob('*.mp3') if file.is_file()]
-# mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_mixture_codes"
+mixture_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_mixture_codes"
 
-mixture_track_dir_path_root = "/homes/al4624/Documents"
-mixture_track_paths = [str(file) for file in Path(mixture_track_dir_path_root).glob('*.mp3') if file.is_file()]
-mixture_code_dir_path = "/homes/al4624/Documents"
+mixture_track_dir_paths = []
 
-mixture_track_dir_paths = [ "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.1",
-                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.3",
-                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.5",
-                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_0.7",
-                            "/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_1.0"]
+signal_weights = []
 
+for noise_level in args.noise_levels:
+    if noise_level not in ['0.1', '0.3', '0.5', '0.7', '1.0']:
+        raise ValueError(f"Unsupported noise level {noise_level}. Supported levels are 0.1, 0.3, 0.5, 0.7, 1.0")
+    mixture_track_dir_paths.append(f"/vol/bitbucket/al4624/finetune_dataset/fma_large/sep/noise_{noise_level}")
+    signal_weights.append(1.0 - float(noise_level))
 
-signal_weights = [0.9, 0.7, 0.5, 0.3, 0.0] #modify to specify the noise levels. Must contain equal number of elements as mixture_track_dir_paths
+print(f"[DEBUG] mixture dir paths: {mixture_track_dir_paths}")
+print(f"[DEBUG] signal weights: {signal_weights}")
 
-inst_track_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_sep" #modify to specify the directory for the instrumental audio tracks
-inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes" #modify to specify the directory for outputting the noised instrumental codes
-
-
+inst_track_dir_path = sep_track_dir_path #modify to specify the directory for the instrumental audio tracks
+noised_inst_code_dir_path = "/vol/bitbucket/al4624/finetune_dataset/fma_large_inst_noised_codes" #modify to specify the directory for outputting the noised instrumental codes
 
 if __name__ == "__main__":
     with ThreadPoolExecutor() as executor:
 
-        # #separated track encode
+        #separated track encode
         # sep_encode_futures = [
         #     executor.map(encode, sep_track_paths, [sep_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track, [encoder_bandwidth] * num_sep_track)
         # ]
 
-        # #instrumental track noising + encode
-        # for i in range(len(signal_weights)):
-        #     signal_weight = signal_weights[i]
-        #     mixture_track_dir_path = mixture_track_dir_paths[i]
-        #     inst_track_paths = [os.path.join(inst_track_dir_path, file.stem + ".Instrumental.mp3") for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
-        #     num_inst_track = len(inst_track_paths)
-        #     executor.map(noise_encode, inst_track_paths, [signal_weight] * num_inst_track, [inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwidth] * num_inst_track)
+      
+        #instrumental track noising + encode
+        for i in range(len(signal_weights)):
+            signal_weight = signal_weights[i]
+            mixture_track_dir_path = mixture_track_dir_paths[i]
 
-        #mixture track encode
-        mix_encode_futures = [
-            executor.map(encode, mixture_track_paths, [mixture_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track, [encoder_bandwidth] * num_sep_track)
-        ]
+            mixture_track_files = Path(mixture_track_dir_path).glob('*.mp3')
+
+            inst_track_paths = [os.path.join(inst_track_dir_path, file.stem + ".Instrumental.mp3") for file in mixture_track_files if file.is_file()]
+            num_inst_track = len(inst_track_paths)
+
+            vocal_track_paths = [os.path.join(sep_track_dir_path, file.stem + ".Vocals.mp3") for file in mixture_track_files if file.is_file()]
+            num_vocal_track = len(vocal_track_paths)
+
+            mixture_track_paths =[str(file) for file in mixture_track_files if file.is_file()]
+
+            if args.inst:
+                executor.map(encode, inst_track_paths, [sep_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwidth] * num_inst_track)
+            
+            if args.vocals:
+                executor.map(encode, vocal_track_paths, [sep_code_dir_path] * num_vocal_track, [codec_model] * num_vocal_track, [device] * num_vocal_track, [encoder_bandwidth] * num_vocal_track)
+
+            if args.noised_inst:
+                executor.map(noise_encode, inst_track_paths, [signal_weight] * num_inst_track, [noised_inst_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwidth] * num_inst_track)
+
+            if args.mixture:
+                executor.map(encode, mixture_track_paths, [mixture_code_dir_path] * num_sep_track, [codec_model] * num_sep_track, [device] * num_sep_track, [encoder_bandwidth] * num_sep_track)
+                
 
 
 

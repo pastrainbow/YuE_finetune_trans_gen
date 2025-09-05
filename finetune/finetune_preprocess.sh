@@ -8,9 +8,10 @@ rm -rf /vol/bitbucket/al4624/cache/finetune_cache/hf_home_cache/*
 rm -rf /vol/bitbucket/al4624/cache/finetune_cache/xdg_cache_home/*
 
 NUM_EXAMPLES=$1
+NOISE_LEVEL=$2
 
 #Extract a certain number of examples from the dataset
-python split_JSONL_doc.py --num_examples $NUM_EXAMPLES
+python split_JSONL_doc.py --num_examples $NUM_EXAMPLES --input_file full_$NOISE_LEVEL.jsonl
 
 #preprocess dataset, update finetune script with correct parameters, then start finetuning
 bash scripts/preprocess_data.sh trans_gen icl_cot inst

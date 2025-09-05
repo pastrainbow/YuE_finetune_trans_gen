@@ -6,7 +6,7 @@
 #email results, store console logs in a .out file
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=al4624
-#SBATCH --output=gpu_job_logs/run_YuE_finetune_schedule_sampling%j.out
+#SBATCH --output=gpu_job_logs/run_YuE_finetune%j.out
 
 rm -rf /vol/bitbucket/al4624/model_output/*
 
@@ -116,7 +116,7 @@ GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
 SEQ_LENGTH=5000 #each 30s track training sequence has length of around 4800 tokens, 5000 should thus cover a whole sequence
 TRAIN_ITERS=3979
-NUM_TRAIN_EPOCHS=1 #Training time is way too long with more epochs at batch size of 1
+NUM_TRAIN_EPOCHS=1
 
 DATALOADER_NUM_WORKERS=4
 
@@ -129,6 +129,7 @@ DATA_SPLIT="900,50,50"
 
 # Model configuration
 TOKENIZER_MODEL_PATH="../inference/mm_tokenizer_v0.2_hf/tokenizer.model"
+# MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-icl"
 MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-icl"
 MODEL_CACHE_DIR="/vol/bitbucket/al4624/cache/finetune_cache/model_cache"
 OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
