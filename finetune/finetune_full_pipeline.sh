@@ -29,7 +29,7 @@ for NOISE_LEVEL in "${NOISE_LEVELS[@]}"; do
 
     #prepare for next round of finetuning
     mv $MODEL_OUTPUT_DIR $MODEL_NOISE_DIR_PREFIX$NOISE_LEVEL
-    mkdir $MODEL_CACHE_DIR
+    mkdir $MODEL_OUTPUT_DIR
     MODEL_NAME=$MODEL_NOISE_DIR_PREFIX$NOISE_LEVEL
 done
 
