@@ -170,15 +170,13 @@ if __name__ == "__main__":
             signal_weight = signal_weights[i]
             mixture_track_dir_path = mixture_track_dir_paths[i]
 
-            mixture_track_files = Path(mixture_track_dir_path).glob('*.mp3')
-
-            inst_track_paths = [os.path.join(inst_track_dir_path, file.stem + ".Instrumental.mp3") for file in mixture_track_files if file.is_file()]
+            inst_track_paths = [os.path.join(inst_track_dir_path, file.stem + ".Instrumental.mp3") for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
             num_inst_track = len(inst_track_paths)
 
-            vocal_track_paths = [os.path.join(sep_track_dir_path, file.stem + ".Vocals.mp3") for file in mixture_track_files if file.is_file()]
+            vocal_track_paths = [os.path.join(sep_track_dir_path, file.stem + ".Vocals.mp3") for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
             num_vocal_track = len(vocal_track_paths)
 
-            mixture_track_paths =[str(file) for file in mixture_track_files if file.is_file()]
+            mixture_track_paths =[str(file) for file in Path(mixture_track_dir_path).glob('*.mp3') if file.is_file()]
 
             if args.inst:
                 executor.map(encode, inst_track_paths, [sep_code_dir_path] * num_inst_track, [codec_model] * num_inst_track, [device] * num_inst_track, [encoder_bandwidth] * num_inst_track)

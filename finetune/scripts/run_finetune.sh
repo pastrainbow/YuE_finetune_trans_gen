@@ -8,7 +8,7 @@
 #SBATCH --mail-user=al4624
 #SBATCH --output=gpu_job_logs/run_YuE_finetune%j.out
 
-rm -rf /vol/bitbucket/al4624/model_output/*
+rm -rf /vol/bitbucket/al4624/YuE_finetune_ouput/cache_output/*
 
 # Help information
 print_help() {
@@ -118,7 +118,7 @@ SEQ_LENGTH=5000 #each 30s track training sequence has length of around 4800 toke
 TRAIN_ITERS=2662
 NUM_TRAIN_EPOCHS=2 #We can only to 2 to keep training time under 24 hours on 1 A100 80G GPU
 
-DATALOADER_NUM_WORKERS=4
+DATALOADER_NUM_WORKERS=2 #avoid using too many workers at batch size of 6, since random OOM can happen
 
 # Data paths (replace with your actual paths)
 DATA_PATH="79884081 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
