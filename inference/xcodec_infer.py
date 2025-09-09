@@ -15,6 +15,7 @@ from pathlib import Path
 from omegaconf import OmegaConf
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from mmtokenizer import _MMSentencePieceTokenizer
 def load_audio_mono(filepath, sampling_rate=16000):
     audio, sr = torchaudio.load(filepath)
     # Convert to mono

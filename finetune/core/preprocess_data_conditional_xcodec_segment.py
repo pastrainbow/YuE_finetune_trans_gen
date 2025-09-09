@@ -233,6 +233,19 @@ class Encoder(EncoderBase):
 
                 audio_prompt_codec_array = options_codecs[selected_option]
 
+
+                if self.args.middle_segment_mask:
+                    # Mask out the middle segment of the prompt
+                    id_count = len(audio_prompt_codec_array)
+                    if id_count < 3:
+                        raise ValueError("Prompt codec too short to apply middle segment mask.")
+                    if DEBUG: print(f"[DEBUG] Length of reference noised audio ids to be input before masking: {len(list(audio_prompt_codec_array))}")
+                    # Masking the middle third of the prompt
+                    segment_id_count = id_count // 3
+                    if DEBUG: print(f"[DEBUG] Mask token: {Encoder.tokenizer.mask}")
+                    audio_prompt_codec_array[segment_id_count : segment_id_count * 2] = Encoder.tokenizer.mask
+                    if DEBUG: print(f"Masked codes: {audio_prompt_codec_array}")
+
                 if DEBUG: print(f"[DEBUG] Length of reference noised audio ids to be input: {len(list(audio_prompt_codec_array))}")
 
                  # Filter prompts with low variation, since dataset contains vocal only tracks, where instrumental track is only silence
@@ -712,6 +725,8 @@ def get_args():
     group.add_argument('--audio-prompt-mode', type=str, default="dual",
                        choices=['mixture', 'dual', 'inst', 'vocal'],
                        help='Source for the audio prompt in ICL mode.')
+    group.add_argument('--middle-segment-mask', action='store_true',
+                       help='Mask out the middle segment of the audio prompt (for ICL inpainting).')
 
 
     group = parser.add_argument_group(title='stage 2 specific')

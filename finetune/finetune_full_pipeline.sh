@@ -2,13 +2,13 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=al4624
 #SBATCH --output=finetune_full_pipeline%j.out
-MODEL_OUTPUT_DIR="/vol/bitbucket/al4624/model_output"
-MODEL_NOISE_DIR_PREFIX="/vol/bitbucket/al4624/noise_"
-FINETUNE_JOB_COMMAND="source ~/.bashrc && YuE_finetune_init && cd finetune && sbatch --partition AMD7-A100-T --mem=30G --parsable scripts/run_finetune.sh"
+MODEL_OUTPUT_DIR="/vol/bitbucket/al4624/YuE_finetune_ouput/cache_output"
+MODEL_NOISE_DIR_PREFIX="/vol/bitbucket/al4624/YuE_finetune_ouput/noise_"
+FINETUNE_JOB_COMMAND="source ~/.bashrc && YuE_finetune_init && cd finetune && sbatch --partition AMD7-A100-T --mem=48G --parsable scripts/run_finetune.sh"
 REMOTE_HOST="gpu_cluster_2"
 
-NOISE_LEVELS=(0.3 0.5 0.7 1.0)
-MODEL_NAME="/vol/bitbucket/al4624/noise_0.1"
+NOISE_LEVELS=(0.1 0.3 0.5 0.7 1.0)
+MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-icl"
 
 for NOISE_LEVEL in "${NOISE_LEVELS[@]}"; do
     bash finetune_preprocess.sh 0 $NOISE_LEVEL
