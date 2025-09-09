@@ -122,7 +122,7 @@ DATALOADER_NUM_WORKERS=2 #avoid using too many workers at batch size of 6, since
 
 # Data paths (replace with your actual paths)
 DATA_PATH="79884081 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
-DATA_CACHE_PATH="/vol/bitbucket/al4624/model_output/finetune_cache/data_cache"
+DATA_CACHE_PATH="/vol/bitbucket/al4624/cache/finetune_cache/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split
 DATA_SPLIT="900,50,50"
