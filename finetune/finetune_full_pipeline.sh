@@ -18,17 +18,27 @@ for NOISE_LEVEL in "${NOISE_LEVELS[@]}"; do
     echo "Finished setting base model to foundation model. Starting noise level $NOISE_LEVEL finetuning."
     
     # submit job remotely and capture job ID
-    jobid=$(ssh -t -q $REMOTE_HOST "bash -i -c '$FINETUNE_JOB_COMMAND'" | tail -n 1)
-    echo "Submitted finetune job with ID $jobid"
+    # take the last line of output and extract just the number
+    jobid=$(ssh -t -q $REMOTE_HOST "bash -i -c '$FINETUNE_JOB_COMMAND'" | tail -n 1 | grep -o '[0-9]\+')
+    echo "Submitted finetune job with ID: '$jobid'. Waiting for job to finish..."
 
     # wait for job to finish
-    # IMPORTANT: can't run sacct command, so this just waits until job is no longer in queue
-    # and assumes job completed successfully
-    while [[ "$(ssh -q $REMOTE_HOST "squeue -j $jobid")" == *$'\n'* ]]; do
+    while true; do
+        #wait for the job to be recognised by the scheduler first
         sleep 5
+        state=$(ssh -q $REMOTE_HOST "scontrol show job $jobid" | awk -F= '/JobState=/ {print $2}' | awk '{print $1}')
+        if [[ "$state" != "RUNNING" && "$state" != "PENDING" ]]; then
+            break
+        fi
     done
 
-    echo "Finished noise level $NOISE_LEVEL finetuning. Job ID: $jobid"
+    if [[ "$state" == "COMPLETED" ]]; then
+        echo "Finished noise level $NOISE_LEVEL finetuning. Job ID: $jobid"
+    else
+        echo "Job $jobid failed with state: $state"
+        echo "Exiting finetune pipeline."
+        exit 1
+    fi
 
     #prepare for next round of finetuning
     mv $MODEL_OUTPUT_DIR $MODEL_NOISE_DIR_PREFIX$NOISE_LEVEL

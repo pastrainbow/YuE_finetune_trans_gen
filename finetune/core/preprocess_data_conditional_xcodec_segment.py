@@ -212,6 +212,7 @@ class Encoder(EncoderBase):
 
         # --- Header Construction ---
         if self.args.prompt_segmentation:
+            if DEBUG: print(f"[DEBUG] Using segmented prompt mode for ICL")
             if self.args.use_audio_icl:
                 # --- Start ICL Prompt Generation ---
                 audio_prompt_codec_ids = []
@@ -341,6 +342,7 @@ class Encoder(EncoderBase):
                 raise ValueError("Only ICL finetune supported, no COT!")
 
         else:
+            if DEBUG: print(f"[DEBUG] Using full prompt mode for ICL")
             if self.args.use_audio_icl:
                 # --- Start ICL Prompt Generation ---
                 audio_prompt_codec_ids = []

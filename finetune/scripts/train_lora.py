@@ -322,7 +322,6 @@ import random
 
 def build_train_valid_test_datasets(args):
     """Build the train, validation, and test datasets."""
-    # torch.set_printoptions(threshold=float('inf'), edgeitems=None, linewidth=200)
     # Number of train/valid/test samples.
     if args.train_samples:
         train_samples = args.train_samples
@@ -343,18 +342,18 @@ def build_train_valid_test_datasets(args):
         ).build()
         logger.info("> Finished creating datasets")
         
-        # if DEBUG:
-        #     # Debugging: Print a few random examples from the training dataset
-        #     num_examples = min(5, len(train_ds))
-        #     sample_indices = random.sample(range(len(train_ds)), num_examples)
-        #     for i, idx in enumerate(sample_indices):
-        #         example = train_ds[idx]
-        #         print(f"[DEBUG] Random Example {i} (index {idx}):")
-        #         for k, v in example.items():
-        #             if isinstance(v, torch.Tensor):
-        #                 print(f"Tensor [{k}]: shape={v.shape}\n{v}")
-        #             else:
-        #                 print(f"{k}: {v}")
+        if DEBUG:
+            # Debugging: Print a few random examples from the training dataset
+            num_examples = min(5, len(train_ds))
+            sample_indices = random.sample(range(len(train_ds)), num_examples)
+            for i, idx in enumerate(sample_indices):
+                example = train_ds[idx]
+                print(f"[DEBUG] Random Example {i} (index {idx}):")
+                for k, v in example.items():
+                    if isinstance(v, torch.Tensor):
+                        print(f"Tensor [{k}]: shape={v.shape}\n{v}")
+                    else:
+                        print(f"{k}: {v}")
 
         return train_ds, valid_ds, test_ds
     except Exception as e:
