@@ -123,7 +123,8 @@ elif [ "$MODE_TYPE" == "icl_cot" ]; then
                   --teacher-forcing \
                   --keep-sequential-samples \
                   --ignore-vocals \
-                  --silent-codec-path /vol/bitbucket/al4624/finetune_dataset/silence/silence.npy
+                  --silent-codec-path /vol/bitbucket/al4624/finetune_dataset/silence/silence.npy \
+                  --middle-segment-mask \
                   "
 
            echo "$args"
