@@ -11,7 +11,7 @@ rm -rf /vol/bitbucket/al4624/cache/inference_cache/xdg_cache_home/*
 
 python infer.py \
     --cuda_idx 0 \
-    --stage1_model /vol/bitbucket/al4624/YuE_finetune_ouput/cache_output \
+    --stage1_model /vol/bitbucket/al4624/YuE_finetune_output/final_model \
     --stage2_model m-a-p/YuE-s2-1B-general \
     --gen_duration 10.0 \
     --use_audio_prompt \
@@ -19,10 +19,12 @@ python infer.py \
     --end_audio_prompt_path /homes/al4624/Documents/YuE_finetune/inference_audio_prompts/end.mp3 \
     --genre_txt ../prompt_egs/genre.txt \
     --lyrics_txt ../prompt_egs/lyrics.txt \
-    --run_n_segments 2 \
+    --run_n_segments 3 \
     --stage2_batch_size 4 \
     --output_dir ../finetune_output \
-    --repetition_penalty 1.1
+    --repetition_penalty 1.1 \
+    --temperature 0.8 \
+    --top_p 0.9 \
 
 # python infer_original.py \
 #     --cuda_idx 0 \

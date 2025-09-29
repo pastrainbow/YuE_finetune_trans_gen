@@ -274,7 +274,10 @@ class Encoder(EncoderBase):
 
                         # --- Process Codec ---
                         try:
-                            instrumental_prompt_ids_seg = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt_segment)
+                            if self.args.middle_segment_mask and segment == segmented_lyrics[1]: # mask middle segment for 3-seg prompts
+                                instrumental_prompt_ids_seg = [Encoder.tokenizer.mask] * (frame_end - frame_start)
+                            else:
+                                instrumental_prompt_ids_seg = Encoder.codectool.npy2ids(raw_codec_instrumental_prompt_segment)
 
                             if not isinstance(instrumental_prompt_ids_seg, (list, np.ndarray)):
                                 raise TypeError("npy2ids did not return a list or ndarray for segment")

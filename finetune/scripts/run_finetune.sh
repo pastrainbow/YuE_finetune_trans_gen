@@ -113,13 +113,13 @@ PER_DEVICE_EVAL_BATCH_SIZE=6
 GLOBAL_BATCH_SIZE=$((NUM_GPUS*PER_DEVICE_TRAIN_BATCH_SIZE))
 USE_BF16=true
 SEQ_LENGTH=5000 #each 30s track training sequence has length of around 4800 tokens, 5000 should thus cover a whole sequence
-TRAIN_ITERS=4450
-NUM_TRAIN_EPOCHS=1 #We can only to 2 to keep training time under 24 hours on 1 A100 80G GPU
+TRAIN_ITERS=4677
+NUM_TRAIN_EPOCHS=4 #We can only to 2 to keep training time under 24 hours on 1 A100 80G GPU
 
 DATALOADER_NUM_WORKERS=2 #avoid using too many workers at batch size of 6, since random OOM can happen
 
 # Data paths (replace with your actual paths)
-DATA_PATH="133507327 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
+DATA_PATH="140313033 ./example/mmap/trans_gen.msa.xcodec_16k_stage_1_token_level_interleave_long_prompt_msa_textfirst_inst_text_document"
 DATA_CACHE_PATH="/vol/bitbucket/al4624/cache/finetune_cache/data_cache"
 
 # Set comma-separated list of proportions for training, validation, and test split
@@ -127,10 +127,10 @@ DATA_SPLIT="900,50,50"
 
 # Model configuration
 TOKENIZER_MODEL_PATH="../inference/mm_tokenizer_v0.2_hf/tokenizer.model"
-MODEL_NAME="m-a-p/YuE-s1-7B-anneal-en-icl"
+MODEL_NAME="/vol/bitbucket/al4624/YuE_finetune_output/final_model"
 # MODEL_NAME="/vol/bitbucket/al4624/YuE_finetune_ouput/noise_0.7"
 MODEL_CACHE_DIR="/vol/bitbucket/al4624/cache/finetune_cache/model_cache"
-OUTPUT_DIR="/vol/bitbucket/al4624/YuE_finetune_mask_output/cache_output"
+OUTPUT_DIR="/vol/bitbucket/al4624/YuE_finetune_output/noise_1.0_2"
 DEEPSPEED_CONFIG=config/ds_config_zero2.json
 
 LEARNING_RATE=1e-6
@@ -140,7 +140,7 @@ LEARNING_RATE=1e-6
 GRADIENT_ACCUMULATION_STEPS=4
 
 # LoRA configuration
-LORA_R=64
+LORA_R=256
 LORA_ALPHA=32
 LORA_DROPOUT=0.1
 LORA_TARGET_MODULES="q_proj k_proj v_proj o_proj gate_proj down_proj up_proj" 
@@ -149,7 +149,7 @@ LOGGING_STEPS=5
 SAVE_STEPS=5
 USE_WANDB=true
 WANDB_API_KEY="632660fd9c33316b26281741852eb6f6595139a6"
-RUN_NAME="YuE-ft-lora-schedule-sampling"
+RUN_NAME="YuE-ft-lora"
 
 
 SCHEDULED_SAMPLING_DECAY="exponential"
@@ -178,7 +178,7 @@ echo "Output directory: $OUTPUT_DIR"
 echo "Training epochs: $NUM_TRAIN_EPOCHS"
 echo "==============================================="
 
-# ==============================
+# ==============================Nvidia Tesla A100 80gb
 # Build and Execute Command
 # ==============================
 
